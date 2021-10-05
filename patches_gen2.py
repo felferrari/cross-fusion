@@ -46,4 +46,3 @@ if params_patches['download']:
     for f in params_download['files_labels']:
         gdd.download_file_from_google_drive(file_id=f['id'],
                                         dest_path=os.path.join(label_raw, f['name']))
-
