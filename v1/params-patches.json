@@ -1,0 +1,35 @@
+{
+    "img_path" : "./imgs",
+    "patches_path" : "./patches",
+
+    "tiles_h":3,
+    "tiles_v":6,
+
+    "download":1,
+    
+    "sar_sub":"sar",
+    "opt_sub":"opt",
+    "label_sub":"label",
+    "pred_sub":"pred",
+    "combined_sub":"combined",
+    "fusion_sub":"fusion",
+
+    "train_sub":"train",
+    "val_sub":"val",
+    "test_sub":"test",
+
+    "p2018":"2018",
+    "p2019":"2019",
+
+    "patch_size":128,
+    "patch_stride":64,
+
+    "opt_bits":12,
+
+    "train_split":0.6,
+    "val_split":0.2,
+    "split_dir":0
+  
+
+
+}
