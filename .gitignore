@@ -133,3 +133,5 @@ dmypy.json
 *.npy
 
 imgs/
+tiles/
+patches/

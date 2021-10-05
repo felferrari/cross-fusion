@@ -7,13 +7,12 @@ import tensorflow as tf
 from tqdm import tqdm
 
 def remove_sub(text):
-    return text.split('.')[0]
+    return text.split('.')[0][6:]
 
 class DataLoader(Sequence):
-    def __init__(self, batch_size, opt_path, sar_path, label_path, patch_size,
+    def __init__(self, batch_size, data_path, label_path, patch_size,
                  opt_bands, sar_bands, num_classes, shuffle = False, limit = None):
-        self.opt_path = opt_path
-        self.sar_path = sar_path
+        self.data_path = data_path
         self.label_path = label_path
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -56,9 +55,9 @@ class DataLoader(Sequence):
         X_sar = np.empty((len(ret_files), self.patch_size, self.patch_size, self.sar_bands))
         Y_label = np.empty((len(ret_files), self.patch_size, self.patch_size, self.num_classes))
         for i, f in enumerate(ret_files):
-            X_opt[i, :, :, :] = np.load(os.path.join(self.opt_path, f'{f}.npy'))
-            X_sar[i, :, :, :] = np.load(os.path.join(self.sar_path, f'{f}.npy'))
-            Y = np.load(os.path.join(self.label_path, f'{f}.npy'))
+            X_opt[i, :, :, :] = np.load(os.path.join(self.data_path, f'opt_{f}.npy'))
+            X_sar[i, :, :, :] = np.load(os.path.join(self.data_path, f'sar_{f}.npy'))
+            Y = np.load(os.path.join(self.label_path, f'label_{f}.npy'))
 
             Y_label[i, :, :, :] = tf.keras.utils.to_categorical(Y, num_classes=self.num_classes)
 
@@ -74,7 +73,7 @@ class DataLoader(Sequence):
         Y_label = np.empty((len(self.used_files), self.patch_size, self.patch_size, self.num_classes))
         pbar = tqdm(self.used_files)
         for i, f in enumerate(pbar):
-            Y = np.load(os.path.join(self.label_path, f'{f}.npy'))
+            Y = np.load(os.path.join(self.label_path, f'label_{f}.npy'))
             if to_categorical:
                 Y_label[i, :, :, :] = tf.keras.utils.to_categorical(Y, num_classes=self.num_classes)
             else:
