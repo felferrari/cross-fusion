@@ -1,11 +1,13 @@
 {
     "img_path" : "./imgs",
     "patches_path" : "./patches",
+    "tiles_patch" : "./tiles",
+    "preview_path": "./preview",
 
     "tiles_h":3,
     "tiles_v":6,
 
-    "download":1,
+    "download":0,
     
     "sar_sub":"sar",
     "opt_sub":"opt",

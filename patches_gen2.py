@@ -15,6 +15,10 @@ logging.info('==============Starting patches generation==============')
 #load the params-patches.json options
 with open(os.path.join('v1', 'params-patches.json')) as param_file:
     params_patches = json.load(param_file)
+
+#load the params-models.json options
+with open(os.path.join('v1', 'params-model.json')) as param_file:
+    params_model = json.load(param_file)
     
 #load the params-patches.json options
 with open(os.path.join('v1', 'params-download.json')) as param_file:
@@ -46,3 +50,32 @@ if params_patches['download']:
     for f in params_download['files_labels']:
         gdd.download_file_from_google_drive(file_id=f['id'],
                                         dest_path=os.path.join(label_raw, f['name']))
+
+
+
+
+#tiles generation
+
+##Create folder
+tiles_patch = params_patches['tiles_patch']
+shutil.rmtree(tiles_patch, ignore_errors=True)
+
+labels = np.expand_dims(np.load(os.path.join(label_raw, 'labels.npy')), axis=-1)
+
+#create preview
+
+
+v_split = np.array_split(labels, params_patches['tiles_h'], axis=1)
+tiles = []
+for part in v_split:
+    h_split = np.array_split(part, params_patches['tiles_v'], axis=0)
+    for tile in h_split:
+        tiles.append(tile)
+
+for idx, tile in enumerate(tiles):
+    os.makedirs(os.path.join(tiles_patch, f'{idx+1:02d}'))
+    np.save(os.path.join(tiles_patch, f'{idx+1:02d}', f'{idx+1:02d}.npy'), tile)
+
+
+
+del labels
