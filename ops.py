@@ -57,7 +57,10 @@ def load_opt(img):
   return np.moveaxis(gdal.Open(img).ReadAsArray(), 0, 2)
 
 def load_sar(img):
-  return np.expand_dims(gdal.Open(img).ReadAsArray(), axis=-1)
+  temp = np.expand_dims(gdal.Open(img).ReadAsArray(), axis=-1)
+  temp = 10**(temp/10)
+  temp[temp>1] = 1
+  return temp
 
 def min_max_scaler(img):
   scaler = MinMaxScaler()

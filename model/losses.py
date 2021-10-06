@@ -31,7 +31,6 @@ class FocalLoss(Loss):
         sar_y_pred = tf.clip_by_value(sar_y_pred, K.epsilon(), 1.0 - K.epsilon())
         fusion_y_pred = tf.clip_by_value(fusion_y_pred, K.epsilon(), 1.0 - K.epsilon())
 
-
         opt_loss = - y_true * (alpha * tf.math.pow((1 - opt_y_pred), self.gamma) * tf.math.log(opt_y_pred))
         sar_loss = - y_true * (alpha * tf.math.pow((1 - sar_y_pred), self.gamma) * tf.math.log(sar_y_pred))
         fusion_loss = - y_true * (alpha * tf.math.pow((1 - fusion_y_pred), self.gamma) * tf.math.log(fusion_y_pred))
