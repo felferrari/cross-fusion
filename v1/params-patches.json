@@ -2,7 +2,7 @@
     "img_path" : "./imgs",
     "patches_path" : "./patches",
     "tiles_path" : "./tiles",
-    "preview_path": "./preview",
+    "pred_path": "./pred",
 
     "tiles_h":3,
     "tiles_v":6,

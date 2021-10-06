@@ -5,6 +5,7 @@ import json
 import os
 from tensorflow.keras.utils import plot_model
 from tensorflow.python.keras import regularizers
+import numpy as np
 
 # load the params-model.json options
 with open(os.path.join('v1', 'params-model.json')) as param_file:
@@ -242,7 +243,7 @@ class Classifier(Layer):
         super(Classifier, self).__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(params_model['classifier']['dropout'], name='drop_0')
         self.conv_0 = tf.keras.layers.Conv2D(
-                filters=params_model['classifier']['classes'],
+                filters=params_model['classes'],
                 kernel_size=1,
                 padding='same',
                 kernel_regularizer = regularizer,
@@ -281,6 +282,34 @@ class DataAugmentation(Layer):
             x_rot_3,
             x_flip_h,
             x_flip_v], axis=0)
+
+class RandomDataAugmentation(Layer):
+    def __init__(self, **kwargs):
+        super(RandomDataAugmentation, self).__init__(**kwargs)
+        self.random = np.random.choice([True, False], 3)
+
+    def call(self, x, y):
+        x_0 = x[0]
+        x_1 = x[1]
+        y = y
+        if self.random[0]:
+            x_0 = tf.image.flip_left_right(x_0)
+            x_1 = tf.image.flip_left_right(x_1)
+            y = tf.image.flip_left_right(y)
+
+        if self.random[1]:
+            x_0 = tf.image.flip_up_down(x_0)
+            x_1 = tf.image.flip_up_down(x_1)
+            y = tf.image.flip_up_down(y)
+
+        if self.random[2]:
+            k = np.random.randint(1, 4)
+            x_0 = tf.image.rot90(x_0, k=k)
+            x_1 = tf.image.rot90(x_1, k=k)
+            y = tf.image.rot90(y, k=k)
+       
+        return ((x_0, x_1), y)
+    
     
 class CombinationLayer(Layer):
     def __init__(self, **kwargs):

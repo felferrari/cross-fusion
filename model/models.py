@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import Model
-from .layers import Decoder, Encoder, Classifier, FusionLayer, CombinationLayer
+from .layers import Decoder, Encoder, Classifier, FusionLayer, CombinationLayer, RandomDataAugmentation
 from tensorflow.keras.layers import Input
 import json
 import os
@@ -54,17 +54,18 @@ class Model_1(Model):
         model = Model(x, self.call(x))
         plot_model(model, to_file = to_file, show_shapes=True)
 
-    def compile(self, optimizers, loss_fn, metrics_dict, class_indexes=None, **kwargs):
+    def compile(self, optimizers, loss_fn, metrics_dict, class_weights, class_indexes, **kwargs):
         super(Model_1, self).compile(**kwargs)
 
-       
+        #self.class_indexes = class_indexes
+
         #initialize optimizers
         self.opt_optimizer = optimizers['opt']
         self.sar_optimizer = optimizers['sar']
         self.fusion_optimizer = optimizers['fusion']
 
         #set loss function
-        self.loss_fn = loss_fn(class_indexes=class_indexes)
+        self.loss_fn = loss_fn(alpha = class_weights, class_indexes = class_indexes)
 
         #set loss tracker metric
         self.opt_loss_tracker = tf.keras.metrics.Mean(name='opt_loss')
@@ -81,10 +82,10 @@ class Model_1(Model):
 
         #set F1Score
         self.f1score_list = []
-        self.f1score_list.append(F1Score(name = 'opt_f1score', n_classes=params_model['classifier']['classes'], class_indexes = class_indexes))
-        self.f1score_list.append(F1Score(name = 'sar_f1score', n_classes=params_model['classifier']['classes'], class_indexes = class_indexes))
-        self.f1score_list.append(F1Score(name = 'fusion_f1score', n_classes=params_model['classifier']['classes'], class_indexes = class_indexes))
-        self.f1score_list.append(F1Score(name = 'combined_f1score', n_classes=params_model['classifier']['classes'], class_indexes = class_indexes))
+        self.f1score_list.append(F1Score(name = 'opt_f1score', n_classes=params_model['classes'], class_indexes = class_indexes))
+        self.f1score_list.append(F1Score(name = 'sar_f1score', n_classes=params_model['classes'], class_indexes = class_indexes))
+        self.f1score_list.append(F1Score(name = 'fusion_f1score', n_classes=params_model['classes'], class_indexes = class_indexes))
+        self.f1score_list.append(F1Score(name = 'combined_f1score', n_classes=params_model['classes'], class_indexes = class_indexes))
 
         #adding other metrics
         self.metrics_list = []
@@ -142,6 +143,10 @@ class Model_1(Model):
 
         x, y_true = data
 
+        #Data Augmentation
+        da_layer = RandomDataAugmentation()
+        x, y_true = da_layer(x, y_true)
+
         with tf.GradientTape(persistent=True) as tape:
             y_pred = self.call(x, training=training)
             opt_loss, sar_loss, fusion_loss = self.loss_fn(y_true, y_pred)
@@ -194,6 +199,15 @@ class Model_1(Model):
         results.update(self.get_f1score_results())
         results.update(self.get_metrics_results())
         return results
+
+    def predict_step(self, data):
+        training = False
+        x = data[0]
+
+        y_pred = self.call(x, training=training)
+        
+        return y_pred
+
 
 
 

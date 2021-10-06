@@ -1,4 +1,8 @@
 {
+    "patch_size":128,
+    "opt_channels":8,
+    "sar_channels":4,
+    "classes":3,
     "encoder":{
         "filter_0":32,
         "res_blocks":[
@@ -25,14 +29,10 @@
     "decoder":{
         "filters":128
     },
-
-    "patch_size":128,
-    "opt_channels":8,
-    "sar_channels":4,
+  
 
     "classifier":{
-        "dropout":0.65,
-        "classes":3
+        "dropout":0.65
     }
 
 }

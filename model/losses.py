@@ -17,6 +17,7 @@ class FocalLoss(Loss):
         opt_y_pred = y_pred[0]
         sar_y_pred = y_pred[1]
         fusion_y_pred = y_pred[2]
+        alpha = self.alpha
         
         #filter the classes indexes       
         if self.class_indexes is not None:
@@ -24,15 +25,16 @@ class FocalLoss(Loss):
             opt_y_pred = tf.gather(opt_y_pred, self.class_indexes, axis=3)
             sar_y_pred = tf.gather(sar_y_pred, self.class_indexes, axis=3)
             fusion_y_pred = tf.gather(fusion_y_pred, self.class_indexes, axis=3)
+            alpha = tf.gather(alpha, self.class_indexes, axis=0)
 
         opt_y_pred = tf.clip_by_value(opt_y_pred, K.epsilon(), 1.0 - K.epsilon())
         sar_y_pred = tf.clip_by_value(sar_y_pred, K.epsilon(), 1.0 - K.epsilon())
         fusion_y_pred = tf.clip_by_value(fusion_y_pred, K.epsilon(), 1.0 - K.epsilon())
 
 
-        opt_loss = - y_true * (self.alpha * tf.math.pow((1 - opt_y_pred), self.gamma) * tf.math.log(opt_y_pred))
-        sar_loss = - y_true * (self.alpha * tf.math.pow((1 - sar_y_pred), self.gamma) * tf.math.log(sar_y_pred))
-        fusion_loss = - y_true * (self.alpha * tf.math.pow((1 - fusion_y_pred), self.gamma) * tf.math.log(fusion_y_pred))
+        opt_loss = - y_true * (alpha * tf.math.pow((1 - opt_y_pred), self.gamma) * tf.math.log(opt_y_pred))
+        sar_loss = - y_true * (alpha * tf.math.pow((1 - sar_y_pred), self.gamma) * tf.math.log(sar_y_pred))
+        fusion_loss = - y_true * (alpha * tf.math.pow((1 - fusion_y_pred), self.gamma) * tf.math.log(fusion_y_pred))
 
         opt_loss    = tf.math.reduce_mean(opt_loss)
         sar_loss    = tf.math.reduce_mean(sar_loss)
