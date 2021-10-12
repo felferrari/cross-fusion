@@ -38,8 +38,8 @@ def generate_save_patches(img, size, stride, save_path, prefix):
       np.save(os.path.join(save_path, f'{prefix}_{i:07d}'), patch)
 
 def reconstruct_image(patches, stride, shape):
-  n_col = m.ceil(shape[1]/stride)
   n_lin = m.ceil(shape[0]/stride)
+  n_col = m.ceil(shape[1]/stride)
   reconstructed_img = np.zeros((n_lin*stride, n_col*stride, patches.shape[-1]))
   for line in range(n_lin):
     for col in range(n_col):
@@ -68,13 +68,13 @@ Load the Optical Imagery -img-. Usually GDAL opens the image in [layers, height 
 to [height, width and layers] order.
 '''
 def load_opt(img):
-  return np.moveaxis(gdal.Open(img).ReadAsArray(), 0, 2)
+  return np.moveaxis(gdal.Open(img).ReadAsArray(), 0, 2).astype(np.float16)
 
 def load_sar(img):
   temp = np.expand_dims(gdal.Open(img).ReadAsArray(), axis=-1)
   temp = 10**(temp/10)
   temp[temp>1] = 1
-  return temp
+  return temp.astype(np.float16)
 
 def min_max_scaler(img):
   scaler = MinMaxScaler()

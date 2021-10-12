@@ -7,10 +7,18 @@ import os
 from tensorflow.keras.metrics import BinaryAccuracy
 from .metrics import F1Score
 from tensorflow.keras.utils import plot_model
+import numpy as np 
+import math as m
+from tqdm import tqdm
+
 
 #load the params-model.json options
 with open(os.path.join('v1', 'params-model.json')) as param_file:
     params_model = json.load(param_file)
+
+def crop_img(img, final_size):
+  crop_size = int((img.shape[0] - final_size)/2)
+  return img[crop_size:crop_size+final_size, crop_size:crop_size+final_size, :]
 
 class Model_1(Model):
     def __init__(self, **kwargs):
@@ -30,6 +38,7 @@ class Model_1(Model):
         self.accuracy_weights = (1.0/3)*tf.ones(shape=3) #0-OPT, 1-SAR, 2-FUSION
     
     def call(self, inputs, training=True):
+        
         opt_enc = self.opt_encoder(inputs[0], training=training)
         sar_enc = self.sar_encoder(inputs[1], training=training)
 
@@ -211,6 +220,68 @@ class Model_1(Model):
         return y_pred
 
 
+    def predict_from_patches(self, data, patch_size, patch_stride, batch_size):
+        shape = data[0].shape[0:2]
+        opt = np.pad(data[0], ((patch_size,patch_size), (patch_size,patch_size), (0,0)), 'symmetric')
+        sar = np.pad(data[1], ((patch_size,patch_size), (patch_size,patch_size), (0,0)), 'symmetric')
 
+        #opt_depth = opt.shape[-1]
+        #sar_depth = sar.shape[-1]
+        depth = 1
 
-    
+        overlap = int((patch_size-patch_stride)/2)
+
+        n_lin = m.ceil(shape[0]/patch_stride)
+        n_col = m.ceil(shape[1]/patch_stride)
+        n_patches =  n_lin*n_col
+        n_batches = m.ceil(n_patches/batch_size)
+        opt_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
+        sar_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
+        fusion_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
+        combined_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
+
+        for batch in tqdm(range(n_batches)):
+            patches_n = [p for p in range(batch*batch_size, min(n_patches, (batch+1)*batch_size))]
+            opt_patches_l = []
+            sar_patches_l = []
+            for patch_n in patches_n:
+                col = patch_n%n_col
+                lin = patch_n//n_col
+                l0 = patch_size+lin*patch_stride-overlap
+                c0 = patch_size+col*patch_stride-overlap
+                opt_patch = opt[l0:l0+patch_size, c0:c0+patch_size, :]
+                sar_patch = sar[l0:l0+patch_size, c0:c0+patch_size, :]
+                opt_patches_l.append(opt_patch)
+                sar_patches_l.append(sar_patch)   
+            
+            opt_patches_l = np.array(opt_patches_l)
+            sar_patches_l = np.array(sar_patches_l)
+
+            opt_pred_b, sar_pred_b, fusion_pred_b, combined_pred_b,  = self.call((opt_patches_l, sar_patches_l))
+
+            
+            
+            opt_pred_b = opt_pred_b.numpy()
+            sar_pred_b = sar_pred_b.numpy()
+            fusion_pred_b = fusion_pred_b.numpy()
+            combined_pred_b = combined_pred_b.numpy()
+
+            for i, patch_n in enumerate(patches_n):
+                col = patch_n%n_col
+                lin = patch_n//n_col
+
+                opt_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(opt_pred_b[i][:,:,1:2], patch_stride)
+                sar_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(sar_pred_b[i][:,:,1:2], patch_stride)
+                fusion_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(fusion_pred_b[i][:,:,1:2], patch_stride)
+                combined_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(combined_pred_b[i][:,:,1:2], patch_stride)
+
+        opt_reconstructed_img = opt_reconstructed_img[:shape[0],:shape[1],:]
+        sar_reconstructed_img = sar_reconstructed_img[:shape[0],:shape[1],:]
+        fusion_reconstructed_img = fusion_reconstructed_img[:shape[0],:shape[1],:]
+        combined_reconstructed_img = combined_reconstructed_img[:shape[0],:shape[1],:]
+        
+        return opt_reconstructed_img, sar_reconstructed_img, fusion_reconstructed_img, combined_reconstructed_img
+                
+            
+            
+
