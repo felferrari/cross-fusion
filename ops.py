@@ -25,16 +25,17 @@ def generate_patches(img, size, stride):
   
   return np.array(patches)
 
-def generate_save_patches(img, size, stride, save_path):
+def generate_save_patches(img, size, stride, save_path, prefix):
   temp_image = np.pad(img, ((size,size), (size,size), (0,0)), 'symmetric')
   overlap = int((size-stride)/2)
-  print('Saving patches')
+  i = 0
   for line in tqdm(range(m.ceil(img.shape[0]/stride))):
     for col in range(m.ceil(img.shape[1]/stride)):
+      i+=1
       l0 = size+line*stride-overlap
       c0 = size+col*stride-overlap
       patch = temp_image[l0:l0+size, c0:c0+size, :]
-      np.save(os.path.join(save_path, f'{line:05d}_{col:05d}'), patch)
+      np.save(os.path.join(save_path, f'{prefix}_{i:07d}'), patch)
 
 def reconstruct_image(patches, stride, shape):
   n_col = m.ceil(shape[1]/stride)
@@ -43,6 +44,19 @@ def reconstruct_image(patches, stride, shape):
   for line in range(n_lin):
     for col in range(n_col):
       reconstructed_img[line*stride:line*stride+stride, col*stride:col*stride+stride] = crop_img(patches[col+line*n_col],stride)
+  return reconstructed_img[:shape[0],:shape[1],:]
+
+def reconstruct_image_from_path(path, stride, shape):
+  patches_f = os.listdir(path)
+  depth = np.load(os.path.join(path, patches_f[0])).shape[-1]
+
+  n_col = m.ceil(shape[1]/stride)
+  n_lin = m.ceil(shape[0]/stride)
+  reconstructed_img = np.zeros((n_lin*stride, n_col*stride, depth))
+  for line in range(n_lin):
+    for col in range(n_col):
+      patch = np.load(os.path.join(path, patches_f[col+line*n_col]))
+      reconstructed_img[line*stride:line*stride+stride, col*stride:col*stride+stride] = crop_img(patch, stride)
   return reconstructed_img[:shape[0],:shape[1],:]
 
 def crop_img(img, final_size):

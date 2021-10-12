@@ -3,11 +3,14 @@
     "patches_path" : "./patches",
     "tiles_path" : "./tiles",
     "pred_path": "./pred",
+    "full_path":"./full",
 
     "tiles_h":3,
     "tiles_v":6,
 
     "download":0,
+
+    
 
     "label_sub":"label",
     "data_sub": "data",
