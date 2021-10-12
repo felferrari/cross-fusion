@@ -65,6 +65,7 @@ class Model_1(Model):
         self.fusion_optimizer = optimizers['fusion']
 
         #set loss function
+        #self.loss_fn = loss_fn(alpha = class_weights, class_indexes = class_indexes)
         self.loss_fn = loss_fn(alpha = class_weights, class_indexes = class_indexes)
 
         #set loss tracker metric
@@ -151,10 +152,11 @@ class Model_1(Model):
             y_pred = self.call(x, training=training)
             opt_loss, sar_loss, fusion_loss = self.loss_fn(y_true, y_pred)
 
+
             #add regularizers losses to respective loss
-            opt_loss += tf.reduce_sum(self.opt_encoder.losses + self.decoder.losses + self.fusion.losses + self.opt_classifier.losses)
-            sar_loss += tf.reduce_sum(self.sar_encoder.losses + self.decoder.losses + self.fusion.losses + self.sar_classifier.losses)
-            fusion_loss += tf.reduce_sum(self.opt_encoder.losses + self.sar_encoder.losses + self.decoder.losses + self.fusion.losses + self.fusion_classifier.losses)
+            opt_loss += tf.reduce_mean(self.opt_encoder.losses + self.decoder.losses + self.fusion.losses + self.opt_classifier.losses)
+            sar_loss += tf.reduce_mean(self.sar_encoder.losses + self.decoder.losses + self.fusion.losses + self.sar_classifier.losses)
+            fusion_loss += tf.reduce_mean(self.opt_encoder.losses + self.sar_encoder.losses + self.decoder.losses + self.fusion.losses + self.fusion_classifier.losses)
         
         self.update_losses(opt_loss, sar_loss, fusion_loss)
         self.update_accuracy(y_true, y_pred)
