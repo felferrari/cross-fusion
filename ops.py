@@ -68,13 +68,13 @@ Load the Optical Imagery -img-. Usually GDAL opens the image in [layers, height 
 to [height, width and layers] order.
 '''
 def load_opt(img):
-  return np.moveaxis(gdal.Open(img).ReadAsArray(), 0, 2).astype(np.float16)
+  return np.moveaxis(gdal.Open(img).ReadAsArray(), 0, 2)
 
 def load_sar(img):
   temp = np.expand_dims(gdal.Open(img).ReadAsArray(), axis=-1)
   temp = 10**(temp/10)
   temp[temp>1] = 1
-  return temp.astype(np.float16)
+  return temp
 
 def min_max_scaler(img):
   scaler = MinMaxScaler()

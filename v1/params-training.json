@@ -1,7 +1,7 @@
 {
     "patience":3,
     "run_eagerly":1,
-    "batch_size":32,
+    "batch_size":4,
     "epochs_train":50,
     "patch_limit": 100,
     "learning_reduction":5
