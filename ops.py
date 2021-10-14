@@ -9,6 +9,7 @@ from PIL import Image
 from osgeo import gdal
 from tensorflow.keras.layers import Input
 from tensorflow.keras.utils import plot_model
+from skimage.morphology import area_opening
 
 
 
@@ -94,3 +95,39 @@ def plot_layer(layer, inputs, to_file = 'model.png'):
   x = [Input(shape=inp) for inp in inputs]
   model = Model(x, layer.call(x))
   plot_model(model, to_file = to_file, show_shapes=True)
+
+def recall_precision(y_true, y_pred, min_area, ths, mask = None):
+  p_r = []
+  for th in ths:
+    opt_class = np.zeros_like(y_pred, dtype=np.int8)
+    opt_class[y_pred>=th] = 1
+
+    mask_areas_pred = np.ones_like(y_pred)
+    area_op = area_opening(opt_class, min_area)
+    area_no_consider = opt_class-area_op # 1- o que foi apagado pelo area_opening
+    mask_areas_pred[area_no_consider==1] = 0 # 0- o que foi apagado pelo area_opening
+
+    mask_borders = np.ones_like(opt_class)
+    mask_borders[y_true==2] = 0 # 0- tudo que for label=2
+
+    mask_no_consider = mask_areas_pred * mask_borders #0-tudo que for label=2 ou removido do area oppening 1-para o resto
+
+    ref_consider = mask_no_consider * y_true
+    pred_consider = mask_no_consider * opt_class
+
+    if mask is not None:
+      ref_final = ref_consider[mask==1]
+      pre_final = pred_consider[mask==1]
+    
+
+    tp = np.count_nonzero(ref_final * pre_final)
+    fp = np.count_nonzero(pre_final - pre_final * ref_final)
+    fn = np.count_nonzero(ref_final - pre_final * ref_final)
+
+    precision = tp/(tp+fp)
+    recall = tp/(tp+fn)
+
+    p_r.append([recall, precision])
+
+  return p_r
+    

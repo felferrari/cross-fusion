@@ -4,7 +4,7 @@ from tensorflow.keras.losses import Loss
 
 class FocalLoss(Loss):
     def __init__(self, gamma=2.0, alpha=1.0, class_indexes = None, return_sum = False, **kwargs):
-        super(FocalLoss, self).__init__(**kwargs)
+        super(FocalLoss, self).__init__(**kwarg s)
         self.gamma = gamma
         self.alpha = alpha
         self.class_indexes = class_indexes
@@ -31,14 +31,24 @@ class FocalLoss(Loss):
         sar_y_pred = tf.clip_by_value(sar_y_pred, K.epsilon(), 1.0 - K.epsilon())
         fusion_y_pred = tf.clip_by_value(fusion_y_pred, K.epsilon(), 1.0 - K.epsilon())
 
-        opt_loss = - y_true * (alpha * tf.math.pow((1 - opt_y_pred), self.gamma) * tf.math.log(opt_y_pred))
-        sar_loss = - y_true * (alpha * tf.math.pow((1 - sar_y_pred), self.gamma) * tf.math.log(sar_y_pred))
-        fusion_loss = - y_true * (alpha * tf.math.pow((1 - fusion_y_pred), self.gamma) * tf.math.log(fusion_y_pred))
+        axes = [0,1,2]
 
-        opt_loss    = tf.math.reduce_mean(opt_loss)
-        sar_loss    = tf.math.reduce_mean(sar_loss)
-        fusion_loss = tf.math.reduce_mean(fusion_loss)
+        #opt_loss = - y_true * (alpha * tf.math.pow((1 - opt_y_pred), self.gamma) * tf.math.log(opt_y_pred))
+        #sar_loss = - y_true * (alpha * tf.math.pow((1 - sar_y_pred), self.gamma) * tf.math.log(sar_y_pred))
+        #fusion_loss = - y_true * (alpha * tf.math.pow((1 - fusion_y_pred), self.gamma) * tf.math.log(fusion_y_pred))
 
+        opt_loss = - y_true * tf.math.pow((1 - opt_y_pred), self.gamma) * tf.math.log(opt_y_pred)
+        opt_loss = alpha*tf.math.reduce_mean(opt_loss, axis=axes)
+        opt_loss = tf.math.reduce_sum(opt_loss)
+
+        sar_loss = - y_true * tf.math.pow((1 - sar_y_pred), self.gamma) * tf.math.log(sar_y_pred)
+        sar_loss = alpha*tf.math.reduce_mean(sar_loss, axis=axes)
+        sar_loss = tf.math.reduce_sum(sar_loss)
+
+        fusion_loss = - y_true * tf.math.pow((1 - fusion_y_pred), self.gamma) * tf.math.log(fusion_y_pred)
+        fusion_loss = alpha*tf.math.reduce_mean(fusion_loss, axis=axes)
+        fusion_loss = tf.math.reduce_sum(fusion_loss)
+        
         if self.return_sum:
             return opt_loss + sar_loss + fusion_loss
 

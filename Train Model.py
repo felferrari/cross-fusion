@@ -9,7 +9,6 @@
 import tensorflow as tf
 from tensorflow.keras.optimizers.schedules import InverseTimeDecay
 from model.models import Model_1
-from testing import test_model, pred_patches
 from dataloader import DataLoader
 from model.losses import FocalLoss, WBCE
 from model.callbacks import UpdateAccuracy
@@ -80,24 +79,6 @@ dl_val = DataLoader(
     limit=params_training['patch_limit']
 )
 
-dl_test = DataLoader(
-    batch_size=params_training['batch_size'],
-    data_path=os.path.join(test_path, params_patches['data_sub']),
-    label_path=os.path.join(test_path, params_patches['label_sub']),
-    patch_size=128,
-    opt_bands=8,
-    sar_bands=4,
-    num_classes=3)
-
-dl_full_test = DataLoader(
-    batch_size=params_training['batch_size'],
-    data_path=os.path.join(full_path, params_patches['data_sub']),
-    label_path=os.path.join(full_path, params_patches['label_sub']),
-    patch_size=128,
-    opt_bands=8,
-    sar_bands=4,
-    num_classes=3)
-
 # %% [markdown]
 # ## Model definition
 
@@ -126,7 +107,7 @@ class_indexes = [0, 1]
 
 model.compile(
     optimizers = optimizers,
-    loss_fn = WBCE,
+    loss_fn = FocalLoss,
     metrics_dict = metrics,
     class_weights = weights,
     class_indexes = class_indexes,
@@ -137,9 +118,9 @@ model.compile(
 # %%
 callbacks = [
     tf.keras.callbacks.EarlyStopping(
-        monitor='val_combined_f1score',
+        monitor='val_loss',
         patience = params_training['patience'],
-        mode = 'max',
+        mode = 'min',
         restore_best_weights=True),
     UpdateAccuracy()
 ]
@@ -218,141 +199,8 @@ plt.legend(loc='lower right')
 plt.savefig('graphics/F1score.png')
 plt.show()
 
-# %% [markdown]
-# ## Evaluation 
-
-# %%
-pred_path = params_patches['pred_path']
-shutil.rmtree(pred_path, ignore_errors=True)
-os.makedirs(pred_path)
-
-
-# %%
-opt_avg_prec_list = []
-sar_avg_prec_list = []
-fusion_avg_prec_list = []
-combined_avg_prec_list = []
-
-for tile_n in params_patches['test_tiles']:
-    dl_test.set_tile(int(tile_n))
-
-    shape_tile = shapes_json[str(tile_n)]
-
-    y_true = np.load(os.path.join(params_patches['tiles_path'], params_patches['label_sub'], f'label_{tile_n:02d}.npy'))
-    y_true = to_categorical(y_true, 3)
-
-    predictions_opt = []
-    predictions_sar = []
-    predictions_fusion = []
-    predictions_combined = []
-
-    for batch in tqdm(range(len(dl_test))):
-        pred = model.predict_on_batch(dl_test[batch][0])
-        predictions_opt.append(pred[0])
-        predictions_sar.append(pred[1])
-        predictions_fusion.append(pred[2])
-        predictions_combined.append(pred[3])  
-
-    predictions_opt = np.concatenate(predictions_opt, axis=0)  
-    predictions_sar = np.concatenate(predictions_sar, axis=0)  
-    predictions_fusion = np.concatenate(predictions_fusion, axis=0)  
-    predictions_combined = np.concatenate(predictions_combined, axis=0)  
-
-    predictions_opt_rec = reconstruct_image(predictions_opt, params_patches['patch_stride'], shape_tile)
-    predictions_sar_rec = reconstruct_image(predictions_sar, params_patches['patch_stride'], shape_tile)
-    predictions_fusion_rec = reconstruct_image(predictions_fusion, params_patches['patch_stride'], shape_tile)
-    predictions_combined_rec = reconstruct_image(predictions_combined, params_patches['patch_stride'], shape_tile)
-
-    np.save(os.path.join(params_patches['pred_path'], f'pred_opt_{tile_n:02d}.npy'), predictions_opt_rec)
-    np.save(os.path.join(params_patches['pred_path'], f'pred_sar_{tile_n:02d}.npy'), predictions_sar_rec)
-    np.save(os.path.join(params_patches['pred_path'], f'pred_fusion_{tile_n:02d}.npy'), predictions_fusion_rec)
-    np.save(os.path.join(params_patches['pred_path'], f'pred_combined_{tile_n:02d}.npy'), predictions_combined_rec)
-
-    opt_avg_prec = average_precision_score(y_true[:, :, 1].flatten(), predictions_opt_rec[:,:,1].flatten())
-    sar_avg_prec = average_precision_score(y_true[:, :, 1].flatten(), predictions_sar_rec[:,:,1].flatten())
-    fusion_avg_prec = average_precision_score(y_true[:, :, 1].flatten(), predictions_fusion_rec[:,:,1].flatten())
-    combined_avg_prec = average_precision_score(y_true[:, :, 1].flatten(), predictions_combined_rec[:,:,1].flatten())
-
-    opt_avg_prec_list.append(opt_avg_prec)
-    sar_avg_prec_list.append(sar_avg_prec)
-    fusion_avg_prec_list.append(fusion_avg_prec)
-    combined_avg_prec_list.append(combined_avg_prec)
-
-    print(f'Precision Average (Class 1) of OPT prediction of tile {tile_n} is {opt_avg_prec:.4f}')
-    print(f'Precision Average (Class 1) of SAR prediction of tile {tile_n} is {sar_avg_prec:.4f}')
-    print(f'Precision Average (Class 1) of FUSION prediction of tile {tile_n} is {fusion_avg_prec:.4f}')
-    print(f'Precision Average (Class 1) of COMBINED prediction of tile {tile_n} is {combined_avg_prec:.4f}')
-    
-    fig, ax = plt.subplots(nrows=1, ncols=5, figsize = (20,60))
-
-    #categorical = to_categorical(y_true, params_model['classes'])
-    img = Image.fromarray(np.uint8(y_true*255))
-    ax[0].axis('off')
-    ax[0].set_title(f'Label #{tile_n:02d}')
-    ax[0].imshow(img)
-
-    img = Image.fromarray(np.uint8(predictions_opt_rec[:,:,1]*255))
-    ax[1].axis('off')
-    ax[1].set_title(f'OPT Pred #{tile_n:02d}')
-    ax[1].imshow(img, cmap='gray')
-
-    img = Image.fromarray(np.uint8(predictions_sar_rec[:,:,1]*255))
-    ax[2].axis('off')
-    ax[2].set_title(f'SAR Pred #{tile_n:02d}')
-    ax[2].imshow(img, cmap='gray')
-
-    img = Image.fromarray(np.uint8(predictions_fusion_rec[:,:,1]*255))
-    ax[3].axis('off')
-    ax[3].set_title(f'FUSION Pred #{tile_n:02d}')
-    ax[3].imshow(img, cmap='gray')
-
-    Img = Image.fromarray(np.uint8(predictions_combined_rec[:,:,1]*255))
-    ax[4].axis('off')
-    ax[4].set_title(f'COMBINED Pred #{tile_n:02d}')
-    ax[4].imshow(img, cmap='gray')
-    
-    plt.show()
-
 
 # %%
 model.save_weights('weights.h5')
-
-
-# %%
-shape = (9202, 17729)
-
-predictions_opt = []
-predictions_sar = []
-predictions_fusion = []
-predictions_combined = []
-
-for batch in tqdm(range(len(dl_full_test))):
-    pred = model.predict_on_batch(dl_test[batch][0])
-    predictions_opt.append(pred[0])
-    predictions_sar.append(pred[1])
-    predictions_fusion.append(pred[2])
-    predictions_combined.append(pred[3])  
-
-predictions_opt = np.concatenate(predictions_opt, axis=0)  
-predictions_sar = np.concatenate(predictions_sar, axis=0)  
-predictions_fusion = np.concatenate(predictions_fusion, axis=0)  
-predictions_combined = np.concatenate(predictions_combined, axis=0)  
-
-
-# %%
-
-predictions_opt_rec = reconstruct_image(predictions_opt, params_patches['patch_stride'], shape)
-predictions_sar_rec = reconstruct_image(predictions_sar, params_patches['patch_stride'], shape)
-predictions_fusion_rec = reconstruct_image(predictions_fusion, params_patches['patch_stride'], shape)
-predictions_combined_rec = reconstruct_image(predictions_combined, params_patches['patch_stride'], shape)
-
-np.save(os.path.join(params_patches['pred_path'], f'full_pred_opt.npy'), predictions_opt_rec)
-np.save(os.path.join(params_patches['pred_path'], f'full_pred_sar.npy'), predictions_sar_rec)
-np.save(os.path.join(params_patches['pred_path'], f'full_pred_fusion.npy'), predictions_fusion_rec)
-np.save(os.path.join(params_patches['pred_path'], f'full_pred_combined.npy'), predictions_combined_rec)
-
-
-# %%
-a[0][0]
 
 
