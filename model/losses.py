@@ -4,7 +4,7 @@ from tensorflow.keras.losses import Loss
 
 class FocalLoss(Loss):
     def __init__(self, gamma=2.0, alpha=1.0, class_indexes = None, return_sum = False, **kwargs):
-        super(FocalLoss, self).__init__(**kwarg s)
+        super(FocalLoss, self).__init__(**kwargs)
         self.gamma = gamma
         self.alpha = alpha
         self.class_indexes = class_indexes
@@ -48,7 +48,7 @@ class FocalLoss(Loss):
         fusion_loss = - y_true * tf.math.pow((1 - fusion_y_pred), self.gamma) * tf.math.log(fusion_y_pred)
         fusion_loss = alpha*tf.math.reduce_mean(fusion_loss, axis=axes)
         fusion_loss = tf.math.reduce_sum(fusion_loss)
-        
+
         if self.return_sum:
             return opt_loss + sar_loss + fusion_loss
 
