@@ -11,7 +11,7 @@ import numpy as np
 with open(os.path.join('v1', 'params-model.json')) as param_file:
     params_model = json.load(param_file)
 
-regularizer = tf.keras.regularizers.L2(0.0001)
+regularizer = tf.keras.regularizers.L2(5e-6)
 
 class AtrousConv(Layer):
     def __init__(self, filters=256, **kwargs):
@@ -309,10 +309,33 @@ class RandomDataAugmentation(Layer):
             y = tf.image.rot90(y, k=k)
        
         return ((x_0, x_1), y)
-    
+
+class RandomDataAugmentation2(Layer):
+    def __init__(self, **kwargs):
+        super(RandomDataAugmentation2, self).__init__(**kwargs)
+        self.random = np.random.choice([True, False], 3)
+
+    def call(self, x, y):
+        y = y
+        if self.random[0]:
+            x_0 = tf.image.flip_left_right(x)
+
+            y = tf.image.flip_left_right(y)
+
+        if self.random[1]:
+            x_0 = tf.image.flip_up_down(x)
+            y = tf.image.flip_up_down(y)
+
+        if self.random[2]:
+            k = np.random.randint(1, 4)
+            x_0 = tf.image.rot90(x, k=k)
+            y = tf.image.rot90(y, k=k)
+       
+        return (x, y)
     
 class CombinationLayer(Layer):
     def __init__(self, **kwargs):
         super(CombinationLayer, self).__init__(**kwargs)
     def call(self, inputs, weights):
         return tf.math.multiply(inputs[0], weights[0]) + tf.math.multiply(inputs[1], weights[1]) + tf.math.multiply(inputs[2], weights[2])
+

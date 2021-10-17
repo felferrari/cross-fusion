@@ -1,15 +1,23 @@
 # To add a new cell, type '# %%'
 # To add a new markdown cell, type '# %% [markdown]'
+# %%
+from IPython import get_ipython
+
 # %% [markdown]
 # # Model Training
 # %% [markdown]
 # ## Importing
 
 # %%
+get_ipython().run_line_magic('load_ext', 'autoreload')
+get_ipython().run_line_magic('autoreload', '2')
+
+
+# %%
 import tensorflow as tf
 from tensorflow.keras.optimizers.schedules import InverseTimeDecay
-from model.models import Model_1
-from dataloader import DataLoader
+from model.models import Model_1, Model_2, Model_3
+from dataloader import DataLoader, DataLoader2
 from model.losses import FocalLoss, WBCE, WCCE
 from model.callbacks import UpdateAccuracy
 from ops import reconstruct_image
@@ -56,7 +64,7 @@ full_path = params_patches['full_path']
 # ## Setting Dataloaders
 
 # %%
-dl_train = DataLoader(
+dl_train = DataLoader2(
     batch_size = params_training['batch_size'],
     data_path=os.path.join(train_path, params_patches['data_sub']),
     label_path=os.path.join(train_path, params_patches['label_sub']),
@@ -64,26 +72,29 @@ dl_train = DataLoader(
     opt_bands=8,
     sar_bands=4,
     num_classes=3,
-    shuffle=True, 
-    limit=params_training['patch_limit']
+    shuffle=True#, 
+    #limit=params_training['patch_limit']
 )
 
-dl_val = DataLoader(
+dl_val = DataLoader2(
     batch_size=params_training['batch_size'],
     data_path=os.path.join(val_path, params_patches['data_sub']),
     label_path=os.path.join(val_path, params_patches['label_sub']),
     patch_size=128,
     opt_bands=8,
     sar_bands=4,
-    num_classes=3,
-    limit=params_training['patch_limit']
+    num_classes=3#,
+    #limit=params_training['patch_limit']
 )
 
 # %% [markdown]
 # ## Model definition
 
 # %%
-model = Model_1(name='modelo_1')
+n_classes = 3
+filters = [2, 4, 8]
+
+model = Model_3(filters, n_classes, name='modelo_1')
 
 metrics = {
 }
@@ -107,7 +118,7 @@ class_indexes = [0, 1]
 
 model.compile(
     optimizers = optimizers,
-    loss_fn = WCCE,
+    loss_fn = WBCE,
     metrics_dict = metrics,
     class_weights = weights,
     class_indexes = class_indexes,
@@ -118,7 +129,7 @@ model.compile(
 # %%
 callbacks = [
     tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss',
+        monitor='val_opt_loss',
         patience = params_training['patience'],
         mode = 'min',
         restore_best_weights=True),
@@ -131,7 +142,7 @@ history = model.fit(
     validation_data=dl_val,
     epochs=params_training['epochs_train'],
     callbacks=callbacks,
-    verbose = 1
+    verbose = 0
     )
 
 # %% [markdown]
@@ -199,8 +210,17 @@ plt.legend(loc='lower right')
 plt.savefig('graphics/F1score.png')
 plt.show()
 
+# %% [markdown]
+# ## Save weights
 
 # %%
 model.save_weights('weights.h5')
+
+# %% [markdown]
+# ### Load images
+
+# %%
+opt = np.load(os.path.join(data_raw, 'opt.npy'))
+sar = np.load(os.path.join(data_raw, 'sar.npy'))
 
 

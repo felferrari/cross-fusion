@@ -113,7 +113,7 @@ def plot_layer(layer, inputs, to_file='model.png'):
 
 def recall_precision(y_true, y_pred, min_area, ths, mask=None):
     p_r = []
-    for th in ths:
+    for th in tqdm(ths):
         opt_class = np.zeros_like(y_pred, dtype=np.int8)
         opt_class[y_pred >= th] = 1
 
@@ -140,8 +140,14 @@ def recall_precision(y_true, y_pred, min_area, ths, mask=None):
         fp = np.count_nonzero(pre_final - pre_final * ref_final)
         fn = np.count_nonzero(ref_final - pre_final * ref_final)
 
-        precision = tp/(tp+fp)
-        recall = tp/(tp+fn)
+        if tp+fp == 0:
+            precision = 0
+        else:
+            precision = tp/(tp+fp)
+        if tp+fn == 0:
+            recall = 0
+        else:
+            recall = tp/(tp+fn)
 
         p_r.append([recall, precision])
 
