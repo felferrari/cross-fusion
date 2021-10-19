@@ -55,11 +55,10 @@ class FocalLoss(Loss):
         return opt_loss, sar_loss, fusion_loss
 
 class WBCE(Loss):
-    def __init__(self, alpha=1.0, class_indexes = None, return_sum = False, **kwargs):
+    def __init__(self, weights=1.0, class_indexes = None, **kwargs):
         super(WBCE, self).__init__(**kwargs)
-        self.alpha = alpha
+        self.weights = weights
         self.class_indexes = class_indexes
-        self.return_sum = return_sum
 
     def __call__(self, y_true, y_pred): 
         return self.call(y_true, y_pred)
@@ -68,7 +67,7 @@ class WBCE(Loss):
         #opt_y_pred = y_pred
         #sar_y_pred = y_pred[1]
         #fusion_y_pred = y_pred[2]
-        alpha = self.alpha
+        weights = self.weights
         
         #filter the classes indexes       
         #if self.class_indexes is not None:
@@ -76,7 +75,7 @@ class WBCE(Loss):
         #    opt_y_pred = tf.gather(opt_y_pred, self.class_indexes, axis=3)
             #sar_y_pred = tf.gather(sar_y_pred, self.class_indexes, axis=3)
             #fusion_y_pred = tf.gather(fusion_y_pred, self.class_indexes, axis=3)
-        #    alpha = tf.gather(alpha, self.class_indexes, axis=0)
+        #    weights = tf.gather(weights, self.class_indexes, axis=0)
 
         #opt_y_pred = tf.clip_by_value(opt_y_pred, K.epsilon(), 1.0 - K.epsilon())
         #sar_y_pred = tf.clip_by_value(sar_y_pred, K.epsilon(), 1.0 - K.epsilon())
@@ -94,20 +93,21 @@ class WBCE(Loss):
         #axes = [0,1,2]
 
         #opt_loss = -(y_true * tf.math.log(opt_y_pred) + (1-y_true) * tf.math.log(1-opt_y_pred))
-        #opt_loss = alpha*tf.math.reduce_mean(opt_loss, axis=axes)
+        #opt_loss = weights*tf.math.reduce_mean(opt_loss, axis=axes)
         #opt_loss = tf.math.reduce_sum(opt_loss)
 
         #sar_loss = -(y_true * tf.math.log(sar_y_pred) + (1-y_true) * tf.math.log(1-sar_y_pred))
-        #sar_loss = alpha*tf.math.reduce_mean(sar_loss, axis=axes)
+        #sar_loss = weights*tf.math.reduce_mean(sar_loss, axis=axes)
         #sar_loss = tf.math.reduce_sum(sar_loss)
 
         #fusion_loss = -(y_true * tf.math.log(fusion_y_pred) + (1-y_true) * tf.math.log(1-fusion_y_pred))
-        #fusion_loss = alpha*tf.math.reduce_mean(fusion_loss, axis=axes)
+        #fusion_loss = weights*tf.math.reduce_mean(fusion_loss, axis=axes)
         #fusion_loss = tf.math.reduce_sum(fusion_loss)
+
         y_pred /= tf.math.reduce_sum(y_pred, axis=-1, keepdims=True)
         y_pred = tf.clip_by_value(y_pred, K.epsilon(), 1.0 - K.epsilon())
         loss = y_true * tf.math.log(y_pred) + (1-y_true) * tf.math.log(1-y_pred)
-        loss = loss * alpha 
+        loss = loss * weights 
         loss = - tf.math.reduce_mean(loss, -1)
         return loss
 

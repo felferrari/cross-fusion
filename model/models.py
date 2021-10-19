@@ -551,6 +551,9 @@ class Model_2(Model):
 class Model_3(Model):
     def __init__(self, filters, n_classes, **kwargs):
         super(Model_3, self).__init__(**kwargs)
+        self.filters = filters
+        self.n_classes = n_classes
+
         self.conv1 = Conv2D(filters[0], (3,3), activation='relu', padding='same', name = 'conv1')
         self.conv2 = Conv2D(filters[1], (3,3), activation='relu', padding='same', name = 'conv2')
         self.conv3 = Conv2D(filters[2], (3,3), activation='relu', padding='same', name = 'conv3')
@@ -578,10 +581,10 @@ class Model_3(Model):
         p1 = self.maxpool1(d1, training = training) #64
 
         d2 = self.conv2(p1, training = training) #64
-        p2 = self.maxpool1(d2, training = training) #32
+        p2 = self.maxpool2(d2, training = training) #32
 
         d3 = self.conv3(p2, training = training) #32
-        p3 = self.maxpool1(d3, training = training) #16
+        p3 = self.maxpool3(d3, training = training) #16
 
         b1 = self.conv4(p3, training = training) #16
         b2 = self.conv5(b1, training = training) #16
@@ -602,207 +605,3 @@ class Model_3(Model):
         out = self.last_conv(m1, training = training)
 
         return out
-
-    def compile(self, optimizers, loss_fn, metrics_dict, class_weights, class_indexes, **kwargs):
-        super(Model_3, self).compile(**kwargs)
-
-        #self.class_indexes = class_indexes
-
-        #initialize optimizers
-        self.opt_optimizer = optimizers['opt']
-
-        self.loss_fn = loss_fn(alpha = class_weights, class_indexes = class_indexes)
-
-        #set loss tracker metric
-        self.opt_loss_tracker = tf.keras.metrics.Mean(name='opt_loss')
-        
-        #set accuracy list
-        self.accuracy_list = []
-        self.accuracy_list.append(BinaryAccuracy(name = 'opt_accuracy'))
-
-        #set F1Score
-        self.f1score_list = []
-        self.f1score_list.append(F1Score(name = 'opt_f1score', n_classes=params_model['classes'], class_indexes = class_indexes))
-
-        #adding other metrics
-        self.metrics_list = []
-        for m in metrics_dict.keys():
-            self.metrics_list.append(metrics_dict[m](name = f'opt_{m}'))
-
-    def update_losses(self, opt_loss):
-        self.opt_loss_tracker.update_state(opt_loss)
-
-    def get_losses_results(self):
-        return {
-            'opt_loss': self.opt_loss_tracker.result()
-        }
-
-    def update_accuracy(self, y_true, y_pred):
-        for i, accuracy in enumerate(self.accuracy_list):
-            accuracy.update_state(y_true, y_pred)  
-
-    def get_accuracy_results(self):
-        return {a.name : a.result() for a in self.accuracy_list}  
-
-    def update_f1score(self, y_true, y_pred):
-        for i, f1score in enumerate(self.f1score_list):
-            f1score.update_state(y_true, y_pred)
-
-    def get_f1score_results(self):
-        return {f.name : f.result() for f in self.f1score_list}
-
-    def update_metrics(self, y_true, y_pred, training):
-        for i, m in enumerate(self.metrics_list):
-            m.update_state(y_true, y_pred)
-
-    def get_metrics_results(self):
-        return {m.name : m.result() for m in self.metrics_list}
-
-    @property
-    def metrics(self):
-        return [m for m in self.metrics_list] + [
-            self.opt_loss_tracker] + self.accuracy_list + self.f1score_list
-    
-    
-    def train_step(self, data):
-        training = True
-
-        x, y_true = data
-
-        #Data Augmentation
-        da_layer = RandomDataAugmentation2()
-        x, y_true = da_layer(x, y_true)
-
-        with tf.GradientTape(persistent=True) as tape:
-            y_pred = self.call(x, training=training)
-            opt_loss = self.loss_fn(y_true, y_pred)
-
-
-        self.update_losses(opt_loss)
-        self.update_accuracy(y_true, y_pred)
-        self.update_f1score(y_true, y_pred)
-        self.update_metrics(y_true, y_pred, training = training)
-  
-        weights = self.trainable_weights
-
-        #opt_weights = [w for w in weights if ('opt_' in w.name) or ('decoder' in w.name)]
-
-
-        opt_grads = tape.gradient(opt_loss, weights)
-
-        self.opt_optimizer.apply_gradients(zip(opt_grads, weights))
-
-        results = self.get_losses_results()
-        results.update(self.get_accuracy_results())
-        results.update(self.get_f1score_results())
-        results.update(self.get_metrics_results())
-        return results
-
-    def test_step(self, data):
-        training = False
-        x, y_true = data
-
-        y_pred = self.call(x, training=training)
-        opt_loss = self.loss_fn(y_true, y_pred)
-
-        self.update_losses(opt_loss)
-        self.update_accuracy(y_true, y_pred)
-        self.update_f1score(y_true, y_pred)
-        self.update_metrics(y_true, y_pred, training = training)
-
-        results = self.get_losses_results()
-        results.update(self.get_accuracy_results())
-        results.update(self.get_f1score_results())
-        results.update(self.get_metrics_results())
-        return results
-
-    def predict_step(self, data):
-        training = False
-        x = data
-
-        y_pred = self.call(x, training=training)
-        
-        return y_pred    
-
-    def summary(self, inputs_shape):
-        x = [Input(shape=inputs_shape[0]), Input(shape=inputs_shape[1])]
-        model = Model(x, self.call(x))
-        return model.summary()
-
-    def plot(self, inputs_shape, to_file='model.png'):
-        x = [Input(shape=inputs_shape[0]), Input(shape=inputs_shape[1])]
-        model = Model(x, self.call(x))
-        plot_model(model, to_file = to_file, show_shapes=True)
-
-    
-
-
-    def predict_from_patches(self, data, patch_size, patch_stride, batch_size):
-        shape = data.shape[0:2]
-        opt = np.pad(data, ((patch_size,patch_size), (patch_size,patch_size), (0,0)), 'symmetric')
-        #sar = np.pad(data[1], ((patch_size,patch_size), (patch_size,patch_size), (0,0)), 'symmetric')
-
-        #opt_depth = opt.shape[-1]
-        #sar_depth = sar.shape[-1]
-        depth = 1
-
-        overlap = int((patch_size-patch_stride)/2)
-
-        n_lin = m.ceil(shape[0]/patch_stride)
-        n_col = m.ceil(shape[1]/patch_stride)
-        n_patches =  n_lin*n_col
-        n_batches = m.ceil(n_patches/batch_size)
-        opt_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
-        #sar_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
-        #fusion_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
-        #combined_reconstructed_img = np.zeros((n_lin*patch_stride, n_col*patch_stride, depth), dtype=np.float16)
-
-        for batch in tqdm(range(n_batches)):
-            patches_n = [p for p in range(batch*batch_size, min(n_patches, (batch+1)*batch_size))]
-            opt_patches_l = []
-            #sar_patches_l = []
-            for patch_n in patches_n:
-                col = patch_n%n_col
-                lin = patch_n//n_col
-                l0 = patch_size+lin*patch_stride-overlap
-                c0 = patch_size+col*patch_stride-overlap
-                opt_patch = opt[l0:l0+patch_size, c0:c0+patch_size, :]
-                #sar_patch = sar[l0:l0+patch_size, c0:c0+patch_size, :]
-                opt_patches_l.append(opt_patch)
-                #sar_patches_l.append(sar_patch)   
-            
-            opt_patches_l = np.array(opt_patches_l)
-            #sar_patches_l = np.array(sar_patches_l)
-
-            opt_pred_b = self.call(opt_patches_l)
-
-            
-            
-            opt_pred_b = opt_pred_b.numpy()
-            #sar_pred_b = sar_pred_b.numpy()
-            #fusion_pred_b = fusion_pred_b.numpy()
-            #combined_pred_b = combined_pred_b.numpy()
-
-            for i, patch_n in enumerate(patches_n):
-                col = patch_n%n_col
-                lin = patch_n//n_col
-
-                opt_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(opt_pred_b[i][:,:,1:2], patch_stride)
-                #sar_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(sar_pred_b[i][:,:,1:2], patch_stride)
-                #fusion_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(fusion_pred_b[i][:,:,1:2], patch_stride)
-                #combined_reconstructed_img[lin*patch_stride:lin*patch_stride+patch_stride, col*patch_stride:col*patch_stride+patch_stride] = crop_img(combined_pred_b[i][:,:,1:2], patch_stride)
-
-        opt_reconstructed_img = opt_reconstructed_img[:shape[0],:shape[1],:]
-        #sar_reconstructed_img = sar_reconstructed_img[:shape[0],:shape[1],:]
-        #fusion_reconstructed_img = fusion_reconstructed_img[:shape[0],:shape[1],:]
-        #combined_reconstructed_img = combined_reconstructed_img[:shape[0],:shape[1],:]
-        
-        return opt_reconstructed_img #, sar_reconstructed_img, fusion_reconstructed_img, combined_reconstructed_img
-                
-         
-
-
-
-
-
-
