@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Layer, Conv2D, Input
+from tensorflow.keras.layers import Layer, Conv2D, Input, MaxPool2D, UpSampling2D, concatenate
 from tensorflow.keras import Model
 import tensorflow as tf
 import json
@@ -336,6 +336,104 @@ class RandomDataAugmentation2(Layer):
 class CombinationLayer(Layer):
     def __init__(self, **kwargs):
         super(CombinationLayer, self).__init__(**kwargs)
-    def call(self, inputs, weights):
-        return tf.math.multiply(inputs[0], weights[0]) + tf.math.multiply(inputs[1], weights[1]) + tf.math.multiply(inputs[2], weights[2])
 
+        self.opt_w =  self.add_weight(initializer='zeros', trainable=False, name='opt_w', dtype=tf.float32)
+        self.sar_w =  self.add_weight(initializer='zeros', trainable=False, name='sar_w', dtype=tf.float32)
+        self.fus_w =  self.add_weight(initializer='zeros', trainable=False, name='fus_w', dtype=tf.float32)
+
+        self.opt_w.assign(tf.constant((1/3)))
+        self.sar_w.assign(tf.constant((1/3)))
+        self.fus_w.assign(tf.constant((1/3)))
+
+
+    def updateWeights(self, accuracies):
+        acc_opt = accuracies['opt_accuracy']
+        acc_sar = accuracies['sar_accuracy']
+        acc_fus = accuracies['fus_accuracy']
+
+        den = acc_opt + acc_sar + acc_fus + 1e-5
+
+        w_opt = (acc_opt + 1e-5)/den
+        w_sar = (acc_sar + 1e-5)/den
+        w_fus = (acc_fus + 1e-5)/den
+
+        self.opt_w.assign(w_opt)
+        self.sar_w.assign(w_sar)
+        self.fus_w.assign(w_fus)
+
+
+
+    def call(self, inputs):
+        opt_in = inputs[0]*self.opt_w
+        sar_in = inputs[1]*self.sar_w
+        fus_in = inputs[2]*self.fus_w
+
+        return opt_in + sar_in + fus_in
+
+
+class UNET_Encoder(Layer):
+    def __init__(self, filters, **kwargs):
+        super(UNET_Encoder, self).__init__(**kwargs)
+        self.filters = filters
+
+        self.conv1 = Conv2D(filters[0], (3,3), activation='relu', padding='same', name = 'conv1')
+        self.conv2 = Conv2D(filters[1], (3,3), activation='relu', padding='same', name = 'conv2')
+        self.conv3 = Conv2D(filters[2], (3,3), activation='relu', padding='same', name = 'conv3')
+
+        self.maxpool1 = MaxPool2D((2,2), name = 'maxPool1')
+        self.maxpool2 = MaxPool2D((2,2), name = 'maxPool2')
+        self.maxpool3 = MaxPool2D((2,2), name = 'maxPool3')
+
+        self.conv4 = Conv2D(filters[2], (3,3), activation='relu', padding='same', name = 'conv4')
+        self.conv5 = Conv2D(filters[2], (3,3), activation='relu', padding='same', name = 'conv5')
+        self.conv6 = Conv2D(filters[2], (3,3), activation='relu', padding='same', name = 'conv6')
+
+    def call(self, inputs, training):
+        d1 = self.conv1(inputs, training = training) #128
+        p1 = self.maxpool1(d1, training = training) #64
+
+        d2 = self.conv2(p1, training = training) #64
+        p2 = self.maxpool2(d2, training = training) #32
+
+        d3 = self.conv3(p2, training = training) #32
+        p3 = self.maxpool3(d3, training = training) #16
+
+        b1 = self.conv4(p3, training = training) #16
+        b2 = self.conv5(b1, training = training) #16
+        b3 = self.conv6(b2, training = training) #16
+
+        return b3, d3, d2, d1
+
+class UNET_Decoder(Layer):
+    def __init__(self, filters, n_classes, **kwargs):
+        super(UNET_Decoder, self).__init__(**kwargs)
+        self.filters = filters
+
+        self.conv7 = Conv2D(filters[2], (3,3), activation='relu', padding='same', name = 'conv7')
+        self.conv8 = Conv2D(filters[1], (3,3), activation='relu', padding='same', name = 'conv8')
+        self.conv9 = Conv2D(filters[0], (3,3), activation='relu', padding='same', name = 'conv9')
+
+        self.upsamp1 = UpSampling2D(size = (2,2), name = 'upSamp1')
+        self.upsamp2 = UpSampling2D(size = (2,2), name = 'upSamp2')
+        self.upsamp3 = UpSampling2D(size = (2,2), name = 'upSamp3')
+
+        #self.last_conv = Conv2D(n_classes, (1,1), activation='softmax')
+
+
+    def call(self, inputs, training):
+        u3 = self.upsamp1(inputs[0], training = training) #32
+        u3 = self.conv7(u3, training = training) #32
+        m3 = concatenate([inputs[1], u3]) #32
+
+        u2 = self.upsamp2(m3, training = training) #64
+        u2 = self.conv8(u2, training = training) #64
+        m2 = concatenate([inputs[2], u2]) #64
+
+        u1 = self.upsamp3(m2, training = training) #128
+        u1 = self.conv9(u1, training = training) #128
+        m1 = concatenate([inputs[3], u1]) #128
+
+        #out = self.last_conv(m1, training = training)
+
+        return m1# out
+     
