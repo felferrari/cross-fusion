@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import Model
-from .layers import Decoder, Encoder, Classifier, FusionLayer, CombinationLayer, RandomDataAugmentation, RandomDataAugmentation2, UNET_Decoder, UNET_Encoder, UNET_Decoder
+from .layers import Decoder, Encoder, Classifier, FusionLayer, CombinationLayer, RandomDataAugmentation, RandomDataAugmentation2, UNET_Decoder, UNET_Encoder, UNET_Decoder, CrossFusion
 from tensorflow.keras.layers import Input, Conv2D, MaxPool2D, UpSampling2D, concatenate
 import json
 import os
@@ -283,8 +283,6 @@ class Model_1(Model):
         
         return opt_reconstructed_img, sar_reconstructed_img, fusion_reconstructed_img, combined_reconstructed_img
                 
-            
-
 class Model_2(Model):
     def __init__(self, **kwargs):
         super(Model_2, self).__init__(**kwargs)
@@ -561,13 +559,18 @@ class ModelBase(Model):
             loss_opt = self.compiled_loss(y_true, y_opt)
             loss_sar = self.compiled_loss(y_true, y_sar)
             loss_fus = self.compiled_loss(y_true, y_fus)
+
+            if hasattr(self, 'fusion'):
+                recon_loss = tf.math.reduce_sum(self.fusion.recon_losses)
+                loss_fus += recon_loss
+
             loss = loss_opt + loss_sar + loss_fus
 
         weights = self.trainable_weights
 
-        opt_weights = [w for w in weights if ('opt_' in w.name) or ('decoder' in w.name)]
-        sar_weights = [w for w in weights if ('sar_' in w.name) or ('decoder' in w.name)]
-        fus_weights = [w for w in weights if ('opt_encoder' in w.name) or ('sar_encoder' in w.name) or ('decoder' in w.name) or ('fus_' in w.name)]
+        opt_weights = [w for w in weights if ('opt_' in w.name) or ('shared_' in w.name)]
+        sar_weights = [w for w in weights if ('sar_' in w.name) or ('shared_' in w.name)]
+        fus_weights = [w for w in weights if ('opt_encoder' in w.name) or ('sar_encoder' in w.name) or ('_decoder' in w.name) or ('fus_' in w.name)]
 
         opt_grads = tape.gradient(loss_opt, opt_weights)
         sar_grads = tape.gradient(loss_sar, sar_weights)
@@ -597,6 +600,11 @@ class ModelBase(Model):
         loss_opt = self.compiled_loss(y_true, y_opt)
         loss_sar = self.compiled_loss(y_true, y_sar)
         loss_fus = self.compiled_loss(y_true, y_fus)
+
+        if hasattr(self, 'fusion'):
+            recon_loss = tf.math.reduce_sum(self.fusion.recon_losses)
+            loss_fus += recon_loss
+
         loss = loss_opt + loss_sar + loss_fus
 
         self.updateCustomMetrics(
@@ -666,7 +674,7 @@ class Model_3(ModelBase):
 
         self.opt_encoder = UNET_Encoder(filters, name = 'opt_encoder')
         self.sar_encoder = UNET_Encoder(filters, name = 'sar_encoder')
-        self.decoder = UNET_Decoder(filters, n_classes, name = 'decoder')
+        self.decoder = UNET_Decoder(filters, n_classes, name = 'shared_decoder')
 
         self.opt_classifier = Classifier(name='opt_classifier')
         self.sar_classifier = Classifier(name='sar_classifier')
@@ -690,6 +698,48 @@ class Model_3(ModelBase):
         opt_out = self.opt_classifier(opt_dec, training = training)
         sar_out = self.sar_classifier(sar_dec, training = training)
         fus_out = self.fus_classifier(fus, training = training)
+
+        comb_out = self.combine_weights((opt_out, sar_out, fus_out))
+
+
+        return opt_out, sar_out, fus_out, comb_out
+
+class Model_4(ModelBase):
+    def __init__(self, filters, n_classes, n_opt_layers, **kwargs):
+        super(Model_4, self).__init__(**kwargs)
+        self.n_opt_layers = n_opt_layers
+        #self.filters = filters
+        #self.n_classes = n_classes
+
+        self.opt_encoder = UNET_Encoder(filters, name = 'opt_encoder')
+        self.sar_encoder = UNET_Encoder(filters, name = 'sar_encoder')
+
+        self.opt_decoder = UNET_Decoder(filters, n_classes, name = 'opt_decoder')
+        self.sar_decoder = UNET_Decoder(filters, n_classes, name = 'sar_decoder')
+        
+        self.fusion = CrossFusion(params_model['fusion']['filters'], name='fus_cross')
+
+        self.opt_classifier = Classifier(name='opt_classifier')
+        self.sar_classifier = Classifier(name='sar_classifier')
+        #self.fus_classifier = Classifier(name='fus_classifier')
+
+        self.combine_weights = CombinationLayer(name='combination')
+
+    def call(self, inputs, training=True):
+        x_opt = inputs[:,:,:,:self.n_opt_layers]
+        x_sar = inputs[:,:,:,self.n_opt_layers:]
+
+        opt_enc = self.opt_encoder(x_opt, training = training)
+        sar_enc = self.sar_encoder(x_sar, training = training)
+
+        opt_dec = self.opt_decoder(opt_enc, training = training)
+        sar_dec = self.sar_decoder(sar_enc, training = training)
+
+        fus_out = self.fusion([opt_dec, sar_dec], training=training)
+
+        opt_out = self.opt_classifier(opt_dec, training = training)
+        sar_out = self.sar_classifier(sar_dec, training = training)
+        #fus_out = self.fus_classifier(fus, training = training)
 
         comb_out = self.combine_weights((opt_out, sar_out, fus_out))
 

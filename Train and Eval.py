@@ -12,9 +12,8 @@ get_ipython().run_line_magic('autoreload', '2')
 #%autoreload # When utils.py is updated
 from utils_unet_resunet import *
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from model.models import Model_3
+from model.models import Model_3, Model_4
 from model.losses import WBCE
-from model.callbacks import UpdateWeights
 root_path = 'imgs/' 
 
 
@@ -23,48 +22,27 @@ root_path = 'imgs/'
 img_type = 'FUSION'
 
 if img_type == 'FUSION':
-    image_stack = np.load(root_path+'New_Images/fus_stack.npy')
+    image_array = np.load(root_path+'New_Images/fus_stack.npy')
     
 
 if img_type == 'OPT':
-    image_stack = np.load(root_path+'New_Images/opt_stack.npy')
+    image_array = np.load(root_path+'New_Images/opt_stack.npy')
     
     
 if img_type == 'SAR':
-    image_stack = np.load(root_path+'New_Images/sar_stack.npy')
-print('Image stack:', image_stack.shape)
+    image_array = np.load(root_path+'New_Images/sar_stack.npy')
+print('Image stack:', image_array.shape)
+
+final_mask1 = np.load(root_path+'New_Images/'+'final_mask1.npy')
+print('Labels stack:', final_mask1.shape)
 
 
 # %%
-
-# Create label mask
-#past_ref = past_ref1 + past_ref2 + clouds_2018 + clouds_2019
-#past_ref[past_ref>=1] = 1
-#buffer = 2
-#final_mask1 = mask_no_considered(ref_2019, buffer, past_ref)
-#del past_ref1, past_ref2, clouds_2018, clouds_2019
-final_mask1 = np.load(root_path+'New_Images/ref/'+'labels.npy')
-
 lim_x = 4000
 lim_y = 2800
-image_stack = image_stack[:lim_x, :lim_y, :]
+image_array = image_array[:lim_x, :lim_y, :]
 final_mask1 = final_mask1[:lim_x, :lim_y]
-#ref_2019 = ref_2019[:lim_x, :lim_y]
-
-h_, w_, channels = image_stack.shape
-print('image stack size: ', image_stack.shape)
-
-# Normalization
-type_norm = 1
-image_array = normalization(image_stack.copy(), type_norm)
-print(np.min(image_array), np.max(image_array))
-del image_stack
-
-# Print pertengate of each class (whole image)
-print('Total no-deforestaion class is {}'.format(len(final_mask1[final_mask1==0])))
-print('Total deforestaion class is {}'.format(len(final_mask1[final_mask1==1])))
-print('Total past deforestaion class is {}'.format(len(final_mask1[final_mask1==2])))
-print('Percentage of deforestaion class is {:.2f}'.format((len(final_mask1[final_mask1==1])*100)/len(final_mask1[final_mask1==0])))
+h_, w_, channels = image_array.shape
 
 
 # %%
@@ -179,7 +157,7 @@ valid_gen_crops = batch_generator(valid_gen, image_array, final_mask1, patch_siz
 
 
 # %%
-exp = 2
+exp = 3
 path_exp = root_path+'experiments/exp'+str(exp)
 path_models = path_exp+'/models'
 path_maps = path_exp+'/pred_maps'
@@ -203,8 +181,8 @@ if method == 'unet':
 
 if method == 'resunet':
    model = build_resunet(input_shape, nb_filters, number_class)
-
-model = Model_3(nb_filters, number_class)
+n_opt_layers = 20
+model = Model_3(nb_filters, number_class, n_opt_layers)
 
 
 # %%
@@ -236,18 +214,18 @@ for tm in range(0,times):
     #if method == 'resunet':
     #   model = build_resunet(input_shape, nb_filters, number_class)
     
-    model = Model_3(nb_filters, number_class)
-    model.compile(optimizer=adam, loss=loss, metrics=['accuracy'], run_eagerly=True)
+    model = Model_3(nb_filters, number_class, n_opt_layers)
     model.build((None,)+input_shape)
+    
+    model.compile(optimizer=adam, loss=loss, metrics=['accuracy'], run_eagerly=True)
     model.summary()
 
     earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=10, verbose=1, mode='min')
     #earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=10, verbose=1, mode='min') ---- val_accuracy
     #checkpoint = ModelCheckpoint(path_models+ '/' + method +'_'+str(tm)+'.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
     checkpoint = ModelCheckpoint(path_models+ '/' + method +'_'+str(tm)+'.h5', monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True, mode='min')
-    weights_update = UpdateWeights()
     lr_reduce = ReduceLROnPlateau(factor=0.9, min_delta=0.0001, patience=5, verbose=1)
-    callbacks_list = [earlystop, checkpoint, weights_update ]
+    callbacks_list = [earlystop, checkpoint]
     # train the model
     start_training = time.time()
     history = model.fit(train_gen_crops,
@@ -289,7 +267,7 @@ input_shape=(patch_size_rows,patch_size_cols, c)
 #if method == 'resunet':
 #   new_model = build_resunet(input_shape, nb_filters, number_class)
 
-new_model = Model_3(nb_filters, number_class)
+new_model = Model_4(nb_filters, number_class, n_opt_layers)
 new_model.build((None,)+input_shape)
 adam = Adam(lr = 1e-3 , beta_1=0.9)
 loss = weighted_categorical_crossentropy(weights)
@@ -307,33 +285,38 @@ for tm in range(0,times):
     patch_opt = []
     patch_sar = []
     patch_fus = []
+    patch_comb = []
     
     for i in range(0,num_patches_y):
         for j in range(0,num_patches_x):
             patch = image1_pad[patch_size_rows*j:patch_size_rows*(j+1), patch_size_cols*i:patch_size_cols*(i+1), :]
-            pred_opt, pred_sar, pred_fus, _ = new_model.predict(np.expand_dims(patch, axis=0))
+            pred_opt, pred_sar, pred_fus, pred_comb = new_model.predict(np.expand_dims(patch, axis=0))
             del patch 
             patch_opt.append(pred_opt[:,:,:,1])
             patch_sar.append(pred_sar[:,:,:,1])
             patch_fus.append(pred_fus[:,:,:,1])
-            del pred_opt, pred_sar, pred_fus
+            patch_comb.append(pred_comb[:,:,:,1])
+            del pred_opt, pred_sar, pred_fus, pred_comb
     end_test =  time.time() - start_test
 
     patches_pred_opt = np.asarray(patch_opt).astype(np.float32)
     patches_pred_sar = np.asarray(patch_sar).astype(np.float32)
     patches_pred_fus = np.asarray(patch_fus).astype(np.float32)
+    patches_pred_comb = np.asarray(patch_comb).astype(np.float32)
 
     prob_recontructed_opt = pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_rows, patch_size_cols, patches_pred_opt)
     prob_recontructed_sar = pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_rows, patch_size_cols, patches_pred_sar)
     prob_recontructed_fus = pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_rows, patch_size_cols, patches_pred_fus)
+    prob_recontructed_comb = pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_rows, patch_size_cols, patches_pred_comb)
 
-    del patches_pred_opt, patches_pred_sar, patches_pred_fus
+    del patches_pred_opt, patches_pred_sar, patches_pred_fus, patches_pred_comb
     np.save(path_maps+'/'+'prob_opt_'+str(tm)+'.npy',prob_recontructed_opt) 
     np.save(path_maps+'/'+'prob_sar_'+str(tm)+'.npy',prob_recontructed_sar) 
     np.save(path_maps+'/'+'prob_fus_'+str(tm)+'.npy',prob_recontructed_fus) 
+    np.save(path_maps+'/'+'prob_comb_'+str(tm)+'.npy',prob_recontructed_comb) 
 
     time_ts.append(end_test)
-    del prob_recontructed_opt, prob_recontructed_sar, prob_recontructed_fus
+    del prob_recontructed_opt, prob_recontructed_sar, prob_recontructed_fus, prob_recontructed_comb
     #del model
 time_ts_array = np.asarray(time_ts)
 # Save test time
@@ -345,40 +328,50 @@ np.save(path_exp+'/metrics_ts.npy', time_ts_array)
 prob_rec_opt = np.zeros((image1_pad.shape[0],image1_pad.shape[1], times))
 prob_rec_sar = np.zeros((image1_pad.shape[0],image1_pad.shape[1], times))
 prob_rec_fus = np.zeros((image1_pad.shape[0],image1_pad.shape[1], times))
+prob_rec_comb = np.zeros((image1_pad.shape[0],image1_pad.shape[1], times))
 
 for tm in range (0, times):
     print(tm)
     prob_rec_opt[:,:,tm] = np.load(path_maps+'/'+'prob_opt_'+str(tm)+'.npy').astype(np.float32)
     prob_rec_sar[:,:,tm] = np.load(path_maps+'/'+'prob_sar_'+str(tm)+'.npy').astype(np.float32)
     prob_rec_fus[:,:,tm] = np.load(path_maps+'/'+'prob_fus_'+str(tm)+'.npy').astype(np.float32)
+    prob_rec_comb[:,:,tm] = np.load(path_maps+'/'+'prob_comb_'+str(tm)+'.npy').astype(np.float32)
 
 mean_prob_opt = np.mean(prob_rec_opt, axis = -1)
 mean_prob_sar = np.mean(prob_rec_sar, axis = -1)
 mean_prob_fus = np.mean(prob_rec_fus, axis = -1)
+mean_prob_comb = np.mean(prob_rec_comb, axis = -1)
+
 np.save(path_maps+'/prob_mean_opt.npy', mean_prob_opt)
 np.save(path_maps+'/prob_mean_sar.npy', mean_prob_sar)
 np.save(path_maps+'/prob_mean_fus.npy', mean_prob_fus)
+np.save(path_maps+'/prob_mean_comb.npy', mean_prob_comb)
 
 
 # %%
 # Plot mean map and reference
-fig = plt.figure(figsize=(15,10))
-ax1 = fig.add_subplot(141)
+fig = plt.figure(figsize=(20,10))
+ax1 = fig.add_subplot(151)
 plt.title('OPT Prediction')
 ax1.imshow(mean_prob_opt, cmap ='jet')
 ax1.axis('off')
 
-ax1 = fig.add_subplot(142)
+ax1 = fig.add_subplot(152)
 plt.title('SAR Prediction')
 ax1.imshow(mean_prob_sar, cmap ='jet')
 ax1.axis('off')
 
-ax1 = fig.add_subplot(143)
+ax1 = fig.add_subplot(153)
 plt.title('FUSION Prediction')
 ax1.imshow(mean_prob_fus, cmap ='jet')
 ax1.axis('off')
 
-ax2 = fig.add_subplot(144)
+ax1 = fig.add_subplot(154)
+plt.title('COMBINATION Prediction')
+ax1.imshow(mean_prob_comb, cmap ='jet')
+ax1.axis('off')
+
+ax2 = fig.add_subplot(155)
 plt.title('Reference')
 ax2.imshow(final_mask1, cmap ='jet')
 ax2.axis('off')
@@ -389,6 +382,7 @@ ax2.axis('off')
 mean_prob_opt = mean_prob_opt[:final_mask1.shape[0], :final_mask1.shape[1]]
 mean_prob_sar = mean_prob_sar[:final_mask1.shape[0], :final_mask1.shape[1]]
 mean_prob_fus = mean_prob_fus[:final_mask1.shape[0], :final_mask1.shape[1]]
+mean_prob_comb = mean_prob_comb[:final_mask1.shape[0], :final_mask1.shape[1]]
 
 ref1 = np.ones_like(final_mask1).astype(np.float32)
 
@@ -397,6 +391,7 @@ TileMask = mask_amazon_ts * ref1
 GTTruePositives = final_mask1==1
     
 Npoints = 10
+
 Pmax_opt = np.max(mean_prob_opt[GTTruePositives * TileMask ==1])
 ProbList_opt = np.linspace(Pmax_opt,0,Npoints)
 
@@ -405,13 +400,19 @@ ProbList_sar = np.linspace(Pmax_sar,0,Npoints)
 
 Pmax_fus = np.max(mean_prob_fus[GTTruePositives * TileMask ==1])
 ProbList_fus = np.linspace(Pmax_fus,0,Npoints)
+
+Pmax_comb = np.max(mean_prob_comb[GTTruePositives * TileMask ==1])
+ProbList_comb = np.linspace(Pmax_comb,0,Npoints)
     
 metrics_opt = matrics_AA_recall(ProbList_opt, mean_prob_opt, final_mask1, mask_amazon_ts, 625)
 metrics_sar = matrics_AA_recall(ProbList_sar, mean_prob_sar, final_mask1, mask_amazon_ts, 625)
 metrics_fus = matrics_AA_recall(ProbList_fus, mean_prob_fus, final_mask1, mask_amazon_ts, 625)
+metrics_comb = matrics_AA_recall(ProbList_comb, mean_prob_comb, final_mask1, mask_amazon_ts, 625)
+
 np.save(path_exp+'/acc_metrics_opt.npy',metrics_opt)
-np.save(path_exp+'/acc_metrics_opt.npy',metrics_sar)
-np.save(path_exp+'/acc_metrics_opt.npy',metrics_fus)
+np.save(path_exp+'/acc_metrics_sar.npy',metrics_sar)
+np.save(path_exp+'/acc_metrics_fus.npy',metrics_fus)
+np.save(path_exp+'/acc_metrics_comb.npy',metrics_comb)
 
 
 # %%
@@ -424,6 +425,9 @@ metrics_copy_sar = complete_nan_values(metrics_copy_sar)
 
 metrics_copy_fus = metrics_fus.copy()
 metrics_copy_fus = complete_nan_values(metrics_copy_fus)
+
+metrics_copy_comb = metrics_comb.copy()
+metrics_copy_comb = complete_nan_values(metrics_copy_comb)
 
 
 # %%
@@ -439,6 +443,10 @@ AA_sar = metrics_copy_sar[:,2]
 Recall_fus = metrics_copy_fus[:,0]
 Precision_fus = metrics_copy_fus[:,1]
 AA_fus = metrics_copy_fus[:,2]
+
+Recall_comb = metrics_copy_comb[:,0]
+Precision_comb = metrics_copy_comb[:,1]
+AA_comb = metrics_copy_comb[:,2]
     
 DeltaR_opt = Recall_opt[1:]-Recall_opt[:-1]
 AP_opt = np.sum(Precision_opt[:-1]*DeltaR_opt)
@@ -452,16 +460,21 @@ DeltaR_fus = Recall_fus[1:]-Recall_fus[:-1]
 AP_fus = np.sum(Precision_fus[:-1]*DeltaR_fus)
 print('FUSION mAP', AP_fus)
 
+DeltaR_comb = Recall_comb[1:]-Recall_comb[:-1]
+AP_comb = np.sum(Precision_comb[:-1]*DeltaR_comb)
+print('COMBINATION mAP', AP_comb)
+
 # Plot Recall vs. Precision curve
-plt.close('all')
-plt.plot(metrics_copy_opt[:,0],metrics_copy_opt[:,1], 'r-', label = 'OPT AP')
-plt.plot(metrics_copy_sar[:,0],metrics_copy_sar[:,1], 'g-', label = 'SAR AP')
-plt.plot(metrics_copy_fus[:,0],metrics_copy_fus[:,1], 'b-', label = 'FUSION AP')
+plt.figure(figsize=(7,7))
+plt.plot(metrics_copy_opt[:,0],metrics_copy_opt[:,1], 'r-', label = f'OPT (AP: {AP_opt:.4f})')
+plt.plot(metrics_copy_sar[:,0],metrics_copy_sar[:,1], 'g-', label = f'SAR (AP: {AP_sar:.4f})')
+plt.plot(metrics_copy_fus[:,0],metrics_copy_fus[:,1], 'b-', label = f'FUSION (AP: {AP_fus:.4f})')
+plt.plot(metrics_copy_comb[:,0],metrics_copy_comb[:,1], 'k-', label = f'COMBINATION (AP: {AP_comb:.4f})')
+plt.legend(loc="lower left")
+ax = plt.gca()
+ax.set_ylim([0,1])
+ax.set_xlim([0,1])
 #plt.plot(metrics_copy[:,0],metrics_copy[:,2])
 plt.grid()
-
-
-# %%
-
 
 

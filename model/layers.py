@@ -246,7 +246,7 @@ class Classifier(Layer):
                 filters=params_model['classes'],
                 kernel_size=1,
                 padding='same',
-                kernel_regularizer = regularizer,
+                #kernel_regularizer = regularizer,
                 name='conv_0')
 
     def call(self, input, training=True):
@@ -436,4 +436,65 @@ class UNET_Decoder(Layer):
         #out = self.last_conv(m1, training = training)
 
         return m1# out
-     
+
+class Conv2D_BN_RELU(Layer):
+    def __init__(self, filters, padding = 'same', **kwargs):
+        super(Conv2D_BN_RELU, self).__init__(**kwargs)
+        self.conv = Conv2D(filters, (3,3), padding=padding, name = 'conv')
+        self.bn = tf.keras.layers.BatchNormalization(name='bn')
+
+    def call(self, inputs, training):
+        x = self.conv(inputs, training = training)
+        x = self.bn(x, training=training)
+        return tf.keras.activations.relu(x)
+
+
+class CrossFusion(Layer):
+    def __init__(self, filters, **kwargs):
+        super(CrossFusion, self).__init__(**kwargs)
+        self.h1 = Conv2D_BN_RELU(filters[0], name = 'h1')
+        self.h2 = Conv2D_BN_RELU(filters[0], name = 'h2')
+        self.j1 = Conv2D_BN_RELU(filters[1], name = 'j1')
+        self.j2 = Conv2D_BN_RELU(filters[2], name = 'j2')
+
+        self.j3 = tf.keras.layers.Conv2D(
+                filters=params_model['classes'],
+                kernel_size=1,
+                padding='same',
+                name='j3')
+
+        self.recon_losses = []
+
+    def call(self, inputs, training):
+        x1_0 = inputs[0]
+        x2_0 = inputs[1]
+
+        x1 = self.h1(x1_0, training = training)
+        x2 = self.h2(x2_0, training = training)
+        x12 = self.h1(x2_0, training = training)
+        x21 = self.h2(x1_0, training = training)
+
+        j1 = concatenate((x1+x12, x2+x21))
+        j2 = concatenate((x1, x21))
+        j3 = concatenate((x12, x2))
+
+        f1_0 = self.j1(j1, training = training)
+        f2_0 = self.j1(j2, training = training)
+        f3_0 = self.j1(j3, training = training)
+
+        f1_1 = self.j2(f1_0, training = training)
+        f2_1 = self.j2(f2_0, training = training)
+        f3_1 = self.j2(f3_0, training = training)
+
+        o1 = self.j3(f1_1, training = training)
+        o2 = self.j3(f2_1, training = training)
+        o3 = self.j3(f3_1, training = training)
+
+        self.recon_losses = [
+            tf.math.reduce_mean(tf.math.pow(o2-o1, 2)),
+            tf.math.reduce_mean(tf.math.pow(o3-o1, 2))
+            ]
+
+        return tf.keras.activations.softmax(o1)
+
+
