@@ -29,6 +29,13 @@
     "decoder":{
         "filters":8
     },
+    "fusion":{
+        "filters":[
+            8,
+            8,
+            4
+        ]
+    },
   
 
     "classifier":{
