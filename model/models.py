@@ -546,7 +546,13 @@ class Model_2(Model):
         return opt_reconstructed_img, sar_reconstructed_img, fusion_reconstructed_img, combined_reconstructed_img
                 
 class ModelBase(Model):
-       
+
+    def __init__(self, **kwargs):
+        super(ModelBase, self).__init__(**kwargs)
+        self.loss_streams = [True, True, True]
+
+    def set_loss_streams(self, streams):
+        self.loss_streams = streams
     
     def train_step(self, data):
         training = True
@@ -562,7 +568,12 @@ class ModelBase(Model):
 
             if hasattr(self, 'fusion'):
                 recon_loss = tf.math.reduce_sum(self.fusion.recon_losses)
-                loss_fus += recon_loss
+                loss_reg = tf.reduce_sum(self.fusion.losses)
+                loss_fus += recon_loss + loss_reg
+
+            #loss_opt += tf.reduce_sum(self.opt_encoder.losses + self.decoder.losses + self.opt_classifier.losses)
+            #loss_sar += tf.reduce_sum(self.sar_encoder.losses + self.decoder.losses + self.sar_classifier.losses)
+            #loss_fus += tf.reduce_sum(self.opt_encoder.losses + self.sar_encoder.losses + self.decoder.losses + self.fusion.losses + self.fusion_classifier.losses)
 
             loss = loss_opt + loss_sar + loss_fus
 
@@ -576,17 +587,20 @@ class ModelBase(Model):
         sar_grads = tape.gradient(loss_sar, sar_weights)
         fus_grads = tape.gradient(loss_fus, fus_weights)
 
-        self.opt_optimizer.apply_gradients(zip(opt_grads, opt_weights))
-        self.sar_optimizer.apply_gradients(zip(sar_grads, sar_weights))
-        self.fus_optimizer.apply_gradients(zip(fus_grads, fus_weights))
+        if self.loss_streams[0]:
+            self.opt_optimizer.apply_gradients(zip(opt_grads, opt_weights))
+        if self.loss_streams[1]:
+            self.sar_optimizer.apply_gradients(zip(sar_grads, sar_weights))
+        if self.loss_streams[2]:
+            self.fus_optimizer.apply_gradients(zip(fus_grads, fus_weights))
 
         self.updateCustomMetrics(
             y_true, y_opt, y_sar, y_fus, loss_opt, loss_sar, loss_fus, loss
             )
 
         ret_dict = {}
-        for m in self.metrics:
-            ret_dict[m.name] = m.result()
+        for met in self.metrics:
+            ret_dict[met.name] = met.result()
 
         return ret_dict
 
@@ -612,8 +626,8 @@ class ModelBase(Model):
             )
 
         ret_dict = {}
-        for m in self.metrics:
-            ret_dict[m.name] = m.result()
+        for met in self.metrics:
+            ret_dict[met.name] = met.result()
 
         return ret_dict
 
@@ -642,7 +656,7 @@ class ModelBase(Model):
         #set loss tracker metric
         self.opt_loss_tracker = tf.keras.metrics.Mean(name='opt_loss')
         self.sar_loss_tracker = tf.keras.metrics.Mean(name='sar_loss')
-        self.fus_loss_tracker = tf.keras.metrics.Mean(name='fusion_loss')
+        self.fus_loss_tracker = tf.keras.metrics.Mean(name='fus_loss')
         self.loss_tracker = tf.keras.metrics.Mean(name='loss')
 
     #to reset all metrics between epochs
@@ -674,7 +688,9 @@ class Model_3(ModelBase):
 
         self.opt_encoder = UNET_Encoder(filters, name = 'opt_encoder')
         self.sar_encoder = UNET_Encoder(filters, name = 'sar_encoder')
-        self.decoder = UNET_Decoder(filters, n_classes, name = 'shared_decoder')
+        #self.decoder = UNET_Decoder(filters, n_classes, name = 'shared_decoder')
+        self.opt_decoder = UNET_Decoder(filters, n_classes, name = 'opt_decoder')
+        self.sar_decoder = UNET_Decoder(filters, n_classes, name = 'sar_decoder')
 
         self.opt_classifier = Classifier(name='opt_classifier')
         self.sar_classifier = Classifier(name='sar_classifier')
@@ -690,8 +706,8 @@ class Model_3(ModelBase):
         opt_enc = self.opt_encoder(x_opt, training = training)
         sar_enc = self.sar_encoder(x_sar, training = training)
 
-        opt_dec = self.decoder(opt_enc, training = training)
-        sar_dec = self.decoder(sar_enc, training = training)
+        opt_dec = self.opt_decoder(opt_enc, training = training)
+        sar_dec = self.sar_decoder(sar_enc, training = training)
 
         fus = tf.math.add(opt_dec, sar_dec)
 
