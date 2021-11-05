@@ -11,7 +11,7 @@ import numpy as np
 with open(os.path.join('v1', 'params-model.json')) as param_file:
     params_model = json.load(param_file)
 
-regularizer = tf.keras.regularizers.L2(5e-6)
+regularizer = tf.keras.regularizers.L2(1e-2)
 
 class AtrousConv(Layer):
     def __init__(self, filters=256, **kwargs):
@@ -241,7 +241,7 @@ class ResNetLayer(Layer):
 class Classifier(Layer):
     def __init__(self, **kwargs):
         super(Classifier, self).__init__(**kwargs)
-        self.dropout = tf.keras.layers.Dropout(params_model['classifier']['dropout'], name='drop_0')
+        #self.dropout = tf.keras.layers.Dropout(params_model['classifier']['dropout'], name='drop_0')
         self.conv_0 = tf.keras.layers.Conv2D(
                 filters=params_model['classes'],
                 kernel_size=1,
@@ -250,7 +250,8 @@ class Classifier(Layer):
                 name='conv_0')
 
     def call(self, input, training=True):
-        x = self.dropout(input, training=training)
+        #x = self.dropout(input, training=training)
+        x=input
         x = self.conv_0(x, training=training)
         return tf.keras.activations.softmax(x)
 
@@ -440,7 +441,12 @@ class UNET_Decoder(Layer):
 class Conv2D_BN_RELU(Layer):
     def __init__(self, filters, padding = 'same', **kwargs):
         super(Conv2D_BN_RELU, self).__init__(**kwargs)
-        self.conv = Conv2D(filters, (3,3), padding=padding, name = 'conv')
+        self.conv = Conv2D(
+            filters, 
+            (3,3), 
+            padding=padding, 
+            kernel_regularizer=regularizer,
+            name = 'conv')
         self.bn = tf.keras.layers.BatchNormalization(name='bn')
 
     def call(self, inputs, training):
