@@ -12,6 +12,8 @@ from tensorflow.keras.utils import plot_model
 from skimage.morphology import area_opening
 from skimage.util.shape import view_as_windows
 from sklearn.metrics import confusion_matrix
+from multiprocessing.pool import Pool
+from itertools import repeat
 
 
 def generate_patches(img, size, stride):
@@ -200,6 +202,63 @@ def matrics_AA_recall(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_,
         metrics_all.append(mm)
     metrics_ = np.asarray(metrics_all)
     return metrics_
+
+def metric_thresholds(thr, prob_map, ref_reconstructed, mask_amazon_ts_, px_area):
+    print(thr)
+    img_reconstructed = np.zeros_like(prob_map).astype(np.int8)
+    img_reconstructed[prob_map >= thr] = 1
+
+    mask_areas_pred = np.ones_like(ref_reconstructed)
+    area = area_opening(img_reconstructed, area_threshold = px_area, connectivity=1)
+    area_no_consider = img_reconstructed-area
+    mask_areas_pred[area_no_consider==1] = 0
+    
+    # Mask areas no considered reference
+    mask_borders = np.ones_like(img_reconstructed)
+    #ref_no_consid = np.zeros((ref_reconstructed.shape))
+    mask_borders[ref_reconstructed==2] = 0
+    #mask_borders[ref_reconstructed==-1] = 0
+    
+    mask_no_consider = mask_areas_pred * mask_borders 
+    ref_consider = mask_no_consider * ref_reconstructed
+    pred_consider = mask_no_consider*img_reconstructed
+    
+    ref_final = ref_consider[mask_amazon_ts_==1]
+    pre_final = pred_consider[mask_amazon_ts_==1]
+    
+    # Metrics
+    cm = confusion_matrix(ref_final, pre_final)
+    #TN = cm[0,0]
+    FN = cm[1,0]
+    TP = cm[1,1]
+    FP = cm[0,1]
+    precision_ = TP/(TP+FP)
+    recall_ = TP/(TP+FN)
+    aa = (TP+FP)/len(ref_final)
+    mm = np.hstack((recall_, precision_, aa))
+    return mm
+
+def metrics_AP(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_, px_area, processes = 1):
+    if processes > 1:
+        pool = Pool(processes=processes)
+        metrics = pool.starmap(
+            metric_thresholds, 
+            zip(
+                thresholds_, 
+                repeat(prob_map),
+                repeat(ref_reconstructed),
+                repeat(mask_amazon_ts_),
+                repeat(px_area),
+                )
+            )
+        return metrics
+    else:
+        metrics = []
+        for thr in thresholds_:
+            metrics.append(metric_thresholds(thr, prob_map, ref_reconstructed, mask_amazon_ts_, px_area))
+            
+        return metrics
+            
     
 def complete_nan_values(metrics):
     vec_prec = metrics[:,1]

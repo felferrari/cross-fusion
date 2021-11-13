@@ -1,0 +1,27 @@
+{
+    "exp":1,
+    "weights":[
+        0.2, 0.8, 0
+    ],
+    
+    "grid_size":[6,3],
+    
+    "times":5,
+    
+    "overlap": 0.7,
+    "patch_size": 128,
+    "batch_size": 32,
+    
+    "img_type": "OPT",
+    "cond": "no_cloudy",
+    "test_cond": "no_cloudy",
+    
+    "nb_filters": [32, 64, 128],
+    
+    "method":"UNET",
+    
+    "tiles_tr":[1,3,6,8,12,16,17],
+    "tiles_val": [7,14]
+
+
+}
