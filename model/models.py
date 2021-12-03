@@ -78,7 +78,7 @@ class ModelBaseFus(Model):
         y_true = data[1]
 
         with tf.GradientTape(persistent=True) as tape:
-            y_opt, y_sar, y_fus, _ = self.call(x, training=training)
+            y_opt, y_sar, y_fus = self.call(x, training=training)
 
 
             loss_opt = self.compiled_loss(y_true, y_opt)
@@ -128,7 +128,7 @@ class ModelBaseFus(Model):
         x = data[0]
         y_true = data[1]
 
-        y_opt, y_sar, y_fus, _ = self.call(x, training=training)
+        y_opt, y_sar, y_fus = self.call(x, training=training)
 
         loss_opt = self.compiled_loss(y_true, y_opt)
         loss_sar = self.compiled_loss(y_true, y_sar)
@@ -154,10 +154,10 @@ class ModelBaseFus(Model):
         training = False
         x = data
 
-        y_opt, y_sar, y_fus, y_comb = self.call(x, training=training)
+        y_opt, y_sar, y_fus= self.call(x, training=training)
 
 
-        return y_opt, y_sar, y_fus, y_comb
+        return y_opt, y_sar, y_fus
 
 
     def compile(self, optimizers, metrics, **kwargs):

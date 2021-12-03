@@ -4,8 +4,6 @@ import os
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 from tensorflow.keras.models import Model
-from model.layers import DataAugmentation
-from PIL import Image
 from osgeo import gdal
 from tensorflow.keras.layers import Input
 from tensorflow.keras.utils import plot_model
@@ -13,7 +11,6 @@ from skimage.morphology import area_opening
 from skimage.util.shape import view_as_windows
 from sklearn.metrics import confusion_matrix
 from multiprocessing.pool import Pool
-from multiprocessing import Manager
 from itertools import repeat
 
 
@@ -43,32 +40,6 @@ def generate_save_patches(img, size, stride, save_path, prefix):
             patch = temp_image[l0:l0+size, c0:c0+size, :]
             np.save(os.path.join(save_path, f'{prefix}_{i:07d}'), patch)
 
-
-def reconstruct_image(patches, stride, shape):
-    n_lin = m.ceil(shape[0]/stride)
-    n_col = m.ceil(shape[1]/stride)
-    reconstructed_img = np.zeros(
-        (n_lin*stride, n_col*stride, patches.shape[-1]))
-    for line in range(n_lin):
-        for col in range(n_col):
-            reconstructed_img[line*stride:line*stride+stride, col*stride:col *
-                              stride+stride] = crop_img(patches[col+line*n_col], stride)
-    return reconstructed_img[:shape[0], :shape[1], :]
-
-
-def reconstruct_image_from_path(path, stride, shape):
-    patches_f = os.listdir(path)
-    depth = np.load(os.path.join(path, patches_f[0])).shape[-1]
-
-    n_col = m.ceil(shape[1]/stride)
-    n_lin = m.ceil(shape[0]/stride)
-    reconstructed_img = np.zeros((n_lin*stride, n_col*stride, depth))
-    for line in range(n_lin):
-        for col in range(n_col):
-            patch = np.load(os.path.join(path, patches_f[col+line*n_col]))
-            reconstructed_img[line*stride:line*stride+stride, col *
-                              stride:col*stride+stride] = crop_img(patch, stride)
-    return reconstructed_img[:shape[0], :shape[1], :]
 
 
 def crop_img(img, final_size):
@@ -145,23 +116,19 @@ def min_max_scaler(img):
     shape = img.shape
     return scaler.fit_transform(np.expand_dims(img.flatten(), axis=-1)).reshape(shape)
 
-
-def augment_data(data):
-    aug = DataAugmentation()
-    return aug.call(data).numpy()
-
-
 def summary(layer, inputs):
     x = [Input(shape=inp) for inp in inputs]
     model = Model(x, layer.call(x))
     return model.summary()
 
-
+'''
 def plot_layer(layer, inputs, to_file='model.png'):
     x = [Input(shape=inp) for inp in inputs]
     model = Model(x, layer.call(x))
     plot_model(model, to_file=to_file, show_shapes=True)
+'''
 
+'''
 def matrics_AA_recall(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_, px_area):
     thresholds = thresholds_    
     metrics_all = []
@@ -203,7 +170,7 @@ def matrics_AA_recall(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_,
         metrics_all.append(mm)
     metrics_ = np.asarray(metrics_all)
     return metrics_
-
+'''
 def metric_thresholds(thr, prob_map, ref_reconstructed, mask_amazon_ts_, px_area):
     print(thr)
     img_reconstructed = np.zeros_like(prob_map, dtype=np.uint8)
@@ -274,7 +241,7 @@ def complete_nan_values(metrics):
     metrics[:,1] = vec_prec
     return metrics 
 
-
+'''
 def recall_precision(y_true, y_pred, min_area, ths, mask=None):
     p_r = []
     for th in tqdm(ths):
@@ -349,3 +316,4 @@ def compute_mAP(X, Y):
     map_ = 100 * np.inner(Y_[:-1], new_dx)
 
     return map_
+'''
