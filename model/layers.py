@@ -65,7 +65,7 @@ class AtrousConv(Layer):
             name='merge_bn'
         )
 
-    def call(self, inputs, training=True):
+    def call(self, inputs, training):
         shape = tf.shape(inputs)
 
         resize_height = shape[1]
@@ -258,11 +258,15 @@ class Classifier(Layer):
 class FusionLayer(Layer):
     def __init__(self, type, **kwargs):
         super(FusionLayer, self).__init__(**kwargs)
-        self.type = type
+        self.recon_losses = []
+        if type == 'sum':
+            self.fusion = tf.keras.layers.Add()
 
-    def call(self, inputs):
-        if self.type == 'sum':
-            return tf.keras.layers.add(inputs)
+        if type == 'concat':
+            self.fusion = tf.keras.layers.Concatenate()
+
+    def call(self, inputs, training):
+        return self.fusion(inputs, training=training)
 
 class DataAugmentation(Layer):
     def __init__(self, **kwargs):
@@ -371,7 +375,6 @@ class CombinationLayer(Layer):
 
         return opt_in + sar_in + fus_in
 
-
 class UNET_Encoder(Layer):
     def __init__(self, filters, **kwargs):
         super(UNET_Encoder, self).__init__(**kwargs)
@@ -454,7 +457,6 @@ class Conv2D_BN_RELU(Layer):
         x = self.bn(x, training=training)
         return tf.keras.activations.relu(x)
 
-
 class CrossFusion(Layer):
     def __init__(self, filters, **kwargs):
         super(CrossFusion, self).__init__(**kwargs)
@@ -503,7 +505,6 @@ class CrossFusion(Layer):
 
         return tf.keras.activations.softmax(o1)
 
-
 class ResNetBlock(Layer):
     def __init__(self, n_filters, **kwargs):
         super(ResNetBlock, self).__init__(**kwargs)
@@ -523,7 +524,6 @@ class ResNetBlock(Layer):
         x_init = self.conv_2(x_init, training=training)
 
         return tf.keras.layers.add([x, x_init])
-
 
 class ResUNET_Encoder(Layer):
     def __init__(self, filters, **kwargs):
