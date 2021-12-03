@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import Model
-from .layers import Classifier, FusionLayer, CombinationLayer
+from .layers import Classifier, FusionLayer
 from .layers import UNET_Encoder, UNET_Decoder, CrossFusion, ResUNET_Encoder, ResUNET_Decoder
 
 import json
@@ -62,7 +62,6 @@ class ModelBase(Model):
 
         y_pred = self.call(x, training=training)
         return y_pred
-    
 
 class ModelBaseFus(Model):
 
@@ -90,10 +89,6 @@ class ModelBaseFus(Model):
                 recon_loss = tf.math.reduce_sum(self.fusion.recon_losses)
                 loss_reg = tf.reduce_sum(self.fusion.losses)
                 loss_fus += recon_loss + loss_reg
-
-            #loss_opt += tf.reduce_sum(self.opt_encoder.losses + self.decoder.losses + self.opt_classifier.losses)
-            #loss_sar += tf.reduce_sum(self.sar_encoder.losses + self.decoder.losses + self.sar_classifier.losses)
-            #loss_fus += tf.reduce_sum(self.opt_encoder.losses + self.sar_encoder.losses + self.decoder.losses + self.fusion.losses + self.fusion_classifier.losses)
 
             loss = loss_opt + loss_sar + loss_fus
 
@@ -206,7 +201,6 @@ class ModelBaseFus(Model):
         self.fus_loss_tracker.update_state(loss_fus)
         self.loss_tracker.update_state(loss)       
 
-
 class UNET(ModelBase):
     def __init__(self, filters, n_classes, **kwargs):
         super(UNET, self).__init__(**kwargs)
@@ -253,8 +247,6 @@ class CrossFusion_UNET(ModelBaseFus):
         self.sar_classifier = Classifier(n_classes, name='sar_classifier')
         #self.fus_classifier = Classifier(name='fus_classifier')
 
-        self.combine_weights = CombinationLayer(name='combination')
-
 
     def call(self, inputs, training = False):
         x_opt = inputs[:,:,:,:self.n_opt_layers]
@@ -270,13 +262,9 @@ class CrossFusion_UNET(ModelBaseFus):
 
         opt_out = self.opt_classifier(opt_dec, training = training)
         sar_out = self.sar_classifier(sar_dec, training = training)
-        #fus_out = self.fus_classifier(fus, training = training)
-
-        comb_out = self.combine_weights((opt_out, sar_out, fus_out))
 
 
-        return opt_out, sar_out, fus_out, comb_out
-
+        return opt_out, sar_out, fus_out
 
 class CrossFusion_ResUNET(ModelBaseFus):
     def __init__(self, filters, n_classes, n_opt_layers, **kwargs):
@@ -293,9 +281,6 @@ class CrossFusion_ResUNET(ModelBaseFus):
 
         self.opt_classifier = Classifier(n_classes, name='opt_classifier')
         self.sar_classifier = Classifier(n_classes, name='sar_classifier')
-        #self.fus_classifier = Classifier(name='fus_classifier')
-
-        self.combine_weights = CombinationLayer(name='combination')
 
 
     def call(self, inputs, training = False):
@@ -312,13 +297,9 @@ class CrossFusion_ResUNET(ModelBaseFus):
 
         opt_out = self.opt_classifier(opt_dec, training = training)
         sar_out = self.sar_classifier(sar_dec, training = training)
-        #fus_out = self.fus_classifier(fus, training = training)
-
-        comb_out = self.combine_weights((opt_out, sar_out, fus_out))
 
 
-        return opt_out, sar_out, fus_out, comb_out
-
+        return opt_out, sar_out, fus_out
 
 class Concat_UNET(ModelBaseFus):
     def __init__(self, filters, n_classes, n_opt_layers, **kwargs):
@@ -337,7 +318,6 @@ class Concat_UNET(ModelBaseFus):
         self.sar_classifier = Classifier(n_classes, name='sar_classifier')
         self.fus_classifier = Classifier(n_classes, name='fus_classifier')
 
-        self.combine_weights = CombinationLayer(name='combination')
 
 
     def call(self, inputs, training = False):
@@ -356,10 +336,8 @@ class Concat_UNET(ModelBaseFus):
         sar_out = self.sar_classifier(sar_dec, training = training)
         fus_out = self.fus_classifier(fus_out, training = training)
 
-        comb_out = self.combine_weights((opt_out, sar_out, fus_out))
 
-
-        return opt_out, sar_out, fus_out, comb_out
+        return opt_out, sar_out, fus_out
 
 class Concat_ResUNET(ModelBaseFus):
     def __init__(self, filters, n_classes, n_opt_layers, **kwargs):
@@ -378,7 +356,6 @@ class Concat_ResUNET(ModelBaseFus):
         self.sar_classifier = Classifier(n_classes, name='sar_classifier')
         self.fus_classifier = Classifier(n_classes, name='fus_classifier')
 
-        self.combine_weights = CombinationLayer(name='combination')
 
 
     def call(self, inputs, training = False):
@@ -397,7 +374,6 @@ class Concat_ResUNET(ModelBaseFus):
         sar_out = self.sar_classifier(sar_dec, training = training)
         fus_out = self.fus_classifier(fus_out, training = training)
 
-        comb_out = self.combine_weights((opt_out, sar_out, fus_out))
 
 
-        return opt_out, sar_out, fus_out, comb_out
+        return opt_out, sar_out, fus_out
