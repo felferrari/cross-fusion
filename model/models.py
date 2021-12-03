@@ -1,12 +1,11 @@
 import tensorflow as tf
 from tensorflow.keras import Model
-from .layers import Decoder, Encoder, Classifier, FusionLayer, CombinationLayer, RandomDataAugmentation
-from .layers import RandomDataAugmentation2, UNET_Encoder, UNET_Decoder, CrossFusion, ResUNET_Encoder, ResUNET_Decoder
+from .layers import Classifier, FusionLayer, CombinationLayer
+from .layers import UNET_Encoder, UNET_Decoder, CrossFusion, ResUNET_Encoder, ResUNET_Decoder
 
 import json
 import os
 from tensorflow.keras.metrics import BinaryAccuracy
-from tensorflow.keras.utils import plot_model
 
 # load the params-model.json options
 with open(os.path.join('v1', 'params-model.json')) as param_file:

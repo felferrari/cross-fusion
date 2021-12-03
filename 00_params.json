@@ -1,0 +1,27 @@
+{
+    "exp":8,
+    "img_type": "FUS",
+    
+    "cond": "no_cloudy",
+    "test_cond": "no_cloudy",
+    
+    "method":"CrossFusion_ResUNET",
+    
+    
+    "weights":[
+        0.2, 0.8, 0.0
+    ],
+    
+    "grid_size":[6,3],
+    
+    "times":5,
+    
+    "overlap": 0.7,
+    "patch_size": 128,
+    "batch_size": 32,
+    
+    "nb_filters": [32, 64, 128],
+    
+    "tiles_tr":[1,3,6,8,12,16,17],
+    "tiles_val": [7,14]
+}

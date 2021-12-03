@@ -13,6 +13,7 @@ from skimage.morphology import area_opening
 from skimage.util.shape import view_as_windows
 from sklearn.metrics import confusion_matrix
 from multiprocessing.pool import Pool
+from multiprocessing import Manager
 from itertools import repeat
 
 
@@ -90,7 +91,7 @@ def create_mask(size_rows, size_cols, grid_size=(6,3)):
     #num_tiles_cols = size_cols//grid_size[1]
     #print('Tiles size: ', num_tiles_rows, num_tiles_cols)
     #patch = np.ones((num_tiles_rows, num_tiles_cols))
-    mask = np.zeros((size_rows, size_cols))
+    mask = np.zeros((size_rows, size_cols), dtype=np.uint8)
     count = 0
     for row in rows:
         for col in cols:
@@ -205,29 +206,31 @@ def matrics_AA_recall(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_,
 
 def metric_thresholds(thr, prob_map, ref_reconstructed, mask_amazon_ts_, px_area):
     print(thr)
-    img_reconstructed = np.zeros_like(prob_map).astype(np.int8)
+    img_reconstructed = np.zeros_like(prob_map, dtype=np.uint8)
+    
     img_reconstructed[prob_map >= thr] = 1
 
-    mask_areas_pred = np.ones_like(ref_reconstructed)
-    area = area_opening(img_reconstructed, area_threshold = px_area, connectivity=1)
-    area_no_consider = img_reconstructed-area
+    mask_areas_pred = np.ones_like(ref_reconstructed, dtype=np.uint8)
+    area = np.uint8(area_opening(img_reconstructed, area_threshold = px_area, connectivity=1))
+    area_no_consider = np.uint8(img_reconstructed-area)
     mask_areas_pred[area_no_consider==1] = 0
     
     # Mask areas no considered reference
-    mask_borders = np.ones_like(img_reconstructed)
+    mask_borders = np.ones_like(img_reconstructed, dtype=np.uint8)
     #ref_no_consid = np.zeros((ref_reconstructed.shape))
     mask_borders[ref_reconstructed==2] = 0
     #mask_borders[ref_reconstructed==-1] = 0
     
-    mask_no_consider = mask_areas_pred * mask_borders 
-    ref_consider = mask_no_consider * ref_reconstructed
-    pred_consider = mask_no_consider*img_reconstructed
+    mask_no_consider = np.uint8(mask_areas_pred * mask_borders)
+    ref_consider = np.uint8(mask_no_consider*ref_reconstructed)
+    pred_consider = np.uint8(mask_no_consider*img_reconstructed)
     
     ref_final = ref_consider[mask_amazon_ts_==1]
     pre_final = pred_consider[mask_amazon_ts_==1]
     
     # Metrics
     cm = confusion_matrix(ref_final, pre_final)
+
     #TN = cm[0,0]
     FN = cm[1,0]
     TP = cm[1,1]
@@ -258,8 +261,9 @@ def metrics_AP(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_, px_are
             metrics.append(metric_thresholds(thr, prob_map, ref_reconstructed, mask_amazon_ts_, px_area))
             
         return metrics
-            
-    
+
+       
+
 def complete_nan_values(metrics):
     vec_prec = metrics[:,1]
     for j in reversed(range(len(vec_prec))):

@@ -1,11 +1,7 @@
-from tensorflow.keras.layers import Layer, Conv2D, Input, MaxPool2D, UpSampling2D, concatenate
-from tensorflow.keras import Model
+from tensorflow.keras.layers import Layer, Conv2D, MaxPool2D, UpSampling2D, concatenate
 import tensorflow as tf
 import json
 import os
-from tensorflow.keras.utils import plot_model
-from tensorflow.python.keras import regularizers
-import numpy as np
 
 # load the params-model.json options
 with open(os.path.join('v1', 'params-model.json')) as param_file:
@@ -89,101 +85,6 @@ class AtrousConv(Layer):
         out = tf.keras.activations.relu(out)
 
         return out
-
-class Decoder(Layer):
-
-    def __init__(self, **kwargs):
-        super(Decoder, self).__init__(**kwargs)
-        self.aspp_0 = AtrousConv(name='aspp_0')
-        self.conv_0 = tf.keras.layers.Conv2D(
-            filters=params_model['decoder']['filters'],
-            kernel_size=1,
-            padding='same',
-            kernel_regularizer = regularizer,
-            name='conv_0')
-        self.bn_0 = tf.keras.layers.BatchNormalization(axis=-1, name='bn_0')
-        self.conv_1 = tf.keras.layers.Conv2D(
-            filters=params_model['decoder']['filters'],
-            kernel_size=3,
-            padding='same',
-            kernel_regularizer = regularizer,
-            name='conv_1')
-        self.bn_1 = tf.keras.layers.BatchNormalization(axis=-1, name='bn_1')
-        self.conv_2 = tf.keras.layers.Conv2D(
-            filters=params_model['decoder']['filters'],
-            kernel_size=3,
-            padding='same',
-            kernel_regularizer = regularizer,
-            name='conv_2')
-        self.bn_2 = tf.keras.layers.BatchNormalization(axis=-1, name='bn_2')
-
-    def call(self, inputs, skip_list, training=True):
-        x = self.aspp_0(inputs, training=training)
-
-        x = self.conv_0(x,  training=training)
-        x = self.bn_0(x, training=training)
-        x = tf.keras.activations.relu(x)
-
-        size_skip = tf.shape(skip_list[0])[1]
-        x = tf.image.resize(x, [size_skip, size_skip])
-        x = tf.keras.layers.concatenate([skip_list[0], x], axis=-1)
-
-        x = self.conv_1(x, training=training)
-        x = self.bn_1(x, training=training)
-        x = tf.keras.activations.relu(x)
-
-        x = tf.image.resize(x, [params_model['patch_size'], params_model['patch_size']])
-
-        x = self.conv_2(x, training=training)
-        x = self.bn_2(x, training=training)
-        x = tf.keras.activations.relu(x)
-        
-        return x
-
-class Encoder(Layer):
-    def __init__(self, **kwargs):
-        super(Encoder, self).__init__(**kwargs)
-        self.conv_0 = tf.keras.layers.Conv2D(
-            filters=params_model['encoder']['filter_0'],
-            kernel_size=3,
-            name='conv_0',
-            kernel_regularizer = regularizer,
-            padding='same'
-        )
-        self.res_layers = []  # list of tuples (layer, skip=True/False)
-        for block, enc_params in enumerate(params_model['encoder']['res_blocks']):
-            for res_layer in range(enc_params['size']):
-                if res_layer == 0 and enc_params['downsize']:
-                    layer = ResNetLayer(
-                        filters=enc_params['filters'], downsample=True, name=f'res_layer_{block}_{res_layer}')
-                else:
-                    layer = ResNetLayer(
-                        filters=enc_params['filters'], downsample=False, name=f'res_layer_{block}_{res_layer}')
-
-                if res_layer == enc_params['size']-1:
-                    self.res_layers.append((layer, enc_params['skip']))
-                else:
-                    self.res_layers.append((layer, 0))
-
-    def call(self, inputs, training=True):
-        x = self.conv_0(inputs, training=training)
-        skip_list = []
-        for res_layer in self.res_layers:
-            x = res_layer[0](x, training=training)
-            if res_layer[1]:
-                skip_list.append(x)
-
-        return x, skip_list
-
-    def summary(self, inputs_shape):
-        x = Input(shape=inputs_shape)
-        model = Model(x, self.call(x))
-        return model.summary()
-
-    def plot(self, inputs_shape, to_file='encoder.png'):
-        x = Input(shape=inputs_shape)
-        model = Model(x, self.call(x))
-        plot_model(model, to_file = to_file, show_shapes=True)
 
 class ResNetLayer(Layer):
     def __init__(self, filters, downsample=False, **kwargs):
@@ -287,57 +188,7 @@ class DataAugmentation(Layer):
             x_rot_3,
             x_flip_h,
             x_flip_v], axis=0)
-
-class RandomDataAugmentation(Layer):
-    def __init__(self, **kwargs):
-        super(RandomDataAugmentation, self).__init__(**kwargs)
-        self.random = np.random.choice([True, False], 3)
-
-    def call(self, x, y):
-        x_0 = x[0]
-        x_1 = x[1]
-        y = y
-        if self.random[0]:
-            x_0 = tf.image.flip_left_right(x_0)
-            x_1 = tf.image.flip_left_right(x_1)
-            y = tf.image.flip_left_right(y)
-
-        if self.random[1]:
-            x_0 = tf.image.flip_up_down(x_0)
-            x_1 = tf.image.flip_up_down(x_1)
-            y = tf.image.flip_up_down(y)
-
-        if self.random[2]:
-            k = np.random.randint(1, 4)
-            x_0 = tf.image.rot90(x_0, k=k)
-            x_1 = tf.image.rot90(x_1, k=k)
-            y = tf.image.rot90(y, k=k)
-       
-        return ((x_0, x_1), y)
-
-class RandomDataAugmentation2(Layer):
-    def __init__(self, **kwargs):
-        super(RandomDataAugmentation2, self).__init__(**kwargs)
-        self.random = np.random.choice([True, False], 3)
-
-    def call(self, x, y):
-        y = y
-        if self.random[0]:
-            x_0 = tf.image.flip_left_right(x)
-
-            y = tf.image.flip_left_right(y)
-
-        if self.random[1]:
-            x_0 = tf.image.flip_up_down(x)
-            y = tf.image.flip_up_down(y)
-
-        if self.random[2]:
-            k = np.random.randint(1, 4)
-            x_0 = tf.image.rot90(x, k=k)
-            y = tf.image.rot90(y, k=k)
-       
-        return (x, y)
-    
+   
 class CombinationLayer(Layer):
     def __init__(self, **kwargs):
         super(CombinationLayer, self).__init__(**kwargs)
